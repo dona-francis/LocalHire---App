@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
+import 'screens/signup_screen.dart';
 
 void main() {
   runApp(const LocalHireApp());
@@ -15,11 +15,11 @@ class LocalHireApp extends StatelessWidget {
       title: 'LocalHire',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFF5B544), // same yellow tone
+          seedColor: const Color(0xFFF5B544),
         ),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: const SignUpScreen(), 
     );
   }
 }
