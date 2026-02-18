@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'saved_screen.dart';
 import 'job_details_screen.dart';
+import 'chat_screen.dart';
 import 'add_job/add_job_screen.dart'; // ✅ Added
 
 class HomeScreen extends StatefulWidget {
@@ -303,7 +304,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     const AddJobScreen(),
               ),
             );
-          } else {
+          } else if (index == 3) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    const ChatScreen(),
+              ),
+            );
+          }
+          else {
             setState(() {
               currentIndex =
                   index;
