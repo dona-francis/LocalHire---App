@@ -5,162 +5,235 @@ class NotificationItem {
   final String title;
   final String subtitle;
   final String? time;
-  final String? imageUrl;
+  final String? image;
   final bool isImportant;
-  final List<NotificationAction>? actions;
-  final VoidCallback onTap;
+  final Widget? navigateTo;
+  final bool showViewButton;
 
   NotificationItem({
     this.icon,
     required this.title,
     required this.subtitle,
     this.time,
-    this.imageUrl,
+    this.image,
     this.isImportant = false,
-    this.actions,
-    required this.onTap,
+    this.navigateTo,
+    this.showViewButton = false,
   });
 }
 
-class NotificationAction {
-  final String label;
-  final VoidCallback onPressed;
-  final Color? color;
-
-  NotificationAction({
-    required this.label,
-    required this.onPressed,
-    this.color,
-  });
-}
-
-class NotificationScreen extends StatelessWidget {
+class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
 
-  // Sample notification data
-  static List<NotificationItem> notifications = [
-    NotificationItem(
-      icon: Icons.flash_on,
-      title: "Instant Job Nearby!",
-      subtitle: "Plumber needed now in Thodupuzha, Kottayam",
-      isImportant: true,
-      onTap: () => print("Instant Job Clicked"),
-      actions: [
-        NotificationAction(
-          label: "Apply",
-          onPressed: () => print("Apply Clicked"),
-          color: Colors.white,
-        ),
-        NotificationAction(
-          label: "Details",
-          onPressed: () => print("Details Clicked"),
-          color: Colors.white70,
-        ),
-      ],
-    ),
-    NotificationItem(
-      icon: Icons.message,
-      title: "Message from Ramesh Singh",
-      subtitle: "Please bring your Aadhar card copy...",
-      time: "2m ago",
-      onTap: () => print("Message Clicked"),
-      actions: [
-        NotificationAction(
-          label: "Reply",
-          onPressed: () => print("Reply Clicked"),
-          color: Colors.green,
-        ),
-      ],
-    ),
-  ];
+  @override
+  State<NotificationScreen> createState() => _NotificationScreenState();
+}
 
-  Widget _buildNotificationCard(NotificationItem item) {
+class _NotificationScreenState extends State<NotificationScreen> {
+  List<NotificationItem> notifications = [];
+
+  @override
+  void initState() {
+    super.initState();
+
+    notifications = [
+      // IMPORTANT SECTION
+      NotificationItem(
+        icon: Icons.flash_on,
+        title: "Instant Job Nearby!",
+        subtitle: "Plumber needed now in Thodupuzha, Kottayam",
+        isImportant: true,
+        navigateTo: const DummyScreen(title: "Instant Job Details"),
+      ),
+      NotificationItem(
+        icon: Icons.notifications,
+        title: "Job Alerts",
+        subtitle: "2 part-time jobs are available",
+        isImportant: true,
+        navigateTo: const DummyScreen(title: "Job Alerts"),
+      ),
+      NotificationItem(
+        icon: Icons.access_time,
+        title: "Reminder",
+        subtitle: "Cleaning scheduled at 10:00 AM",
+        isImportant: true,
+        navigateTo: const DummyScreen(title: "Reminder Details"),
+      ),
+
+      // GENERAL SECTION
+      NotificationItem(
+        icon: Icons.message,
+        title: "Message from Ramesh Singh",
+        subtitle: "Please bring your Aadhar card copy...",
+        time: "2m ago",
+        navigateTo: const DummyScreen(title: "Chat Screen"),
+      ),
+      NotificationItem(
+        icon: Icons.check_circle,
+        title: "Application Accepted",
+        subtitle: "Your application for 'Electrician' has been accepted.",
+        time: "1h ago",
+        navigateTo: const DummyScreen(title: "Application Details"),
+      ),
+      NotificationItem(
+        image: "assets/profile.jpg", // replace with your asset
+        title: "New Applicant",
+        subtitle: "Rajesh Kumar applied for Plumber",
+        time: "4h ago",
+        showViewButton: true,
+        navigateTo: const DummyScreen(title: "Applicant Details"),
+      ),
+      NotificationItem(
+        image: "assets/profile.jpg",
+        title: "Review and rate Rajesh Kumar",
+        subtitle: "Share your experience about the work completed.",
+        time: "6h ago",
+        navigateTo: const DummyScreen(title: "Review Screen"),
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final important =
+        notifications.where((item) => item.isImportant).toList();
+    final general =
+        notifications.where((item) => !item.isImportant).toList();
+
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        title: const Text("Notifications"),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: ListView(
+        children: [
+          if (important.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                "Important",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ...important.map((item) => buildCard(item)),
+          ],
+          if (general.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                "General",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ...general.map((item) => buildCard(item)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget buildCard(NotificationItem item) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: item.onTap,
+        borderRadius: BorderRadius.circular(18),
+        onTap: () {
+          if (item.navigateTo != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => item.navigateTo!),
+            );
+          }
+        },
         child: Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: item.isImportant ? const Color(0xFFE7B34F) : Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            color: item.isImportant
+                ? const Color(0xFFE7B34F)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                  color: Colors.grey.withOpacity(0.2),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3))
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
+              ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  item.imageUrl != null
-                      ? CircleAvatar(
-                          backgroundImage: AssetImage(item.imageUrl!),
-                        )
-                      : CircleAvatar(
-                          backgroundColor: item.isImportant
-                              ? Colors.white.withOpacity(0.3)
-                              : Colors.grey[300],
-                          child: Icon(
-                            item.icon,
-                            color: item.isImportant ? Colors.white : Colors.black,
-                          ),
-                        ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: item.isImportant ? Colors.white : Colors.black),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.subtitle,
-                          style: TextStyle(
-                              color: item.isImportant ? Colors.white70 : Colors.grey[700]),
-                        ),
-                      ],
+              item.image != null
+                  ? CircleAvatar(
+                      radius: 24,
+                      backgroundImage: AssetImage(item.image!),
+                    )
+                  : CircleAvatar(
+                      radius: 24,
+                      backgroundColor: item.isImportant
+                          ? Colors.white.withOpacity(0.3)
+                          : Colors.grey[200],
+                      child: Icon(
+                        item.icon,
+                        color: item.isImportant
+                            ? Colors.white
+                            : Colors.black,
+                      ),
+                    ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: item.isImportant
+                            ? Colors.white
+                            : Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: item.isImportant
+                            ? Colors.white70
+                            : Colors.grey[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (item.showViewButton)
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => item.navigateTo!),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE7B34F),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                  if (item.time != null)
-                    Text(
-                      item.time!,
-                      style: TextStyle(
-                          color: item.isImportant ? Colors.white70 : Colors.grey[500],
-                          fontSize: 12),
-                    ),
-                ],
-              ),
-              if (item.actions != null && item.actions!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Row(
-                    children: item.actions!
-                        .map(
-                          (action) => Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: action.color ?? Colors.blue,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                              ),
-                              onPressed: action.onPressed,
-                              child: Text(action.label),
-                            ),
-                          ),
-                        )
-                        .toList(),
+                  child: const Text("View"),
+                )
+              else if (item.time != null)
+                Text(
+                  item.time!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: item.isImportant
+                        ? Colors.white70
+                        : Colors.grey,
                   ),
                 ),
             ],
@@ -169,18 +242,22 @@ class NotificationScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class DummyScreen extends StatelessWidget {
+  final String title;
+
+  const DummyScreen({super.key, required this.title});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Notifications"),
-      ),
-      body: ListView.builder(
-        itemCount: notifications.length,
-        itemBuilder: (context, index) {
-          return _buildNotificationCard(notifications[index]);
-        },
+      appBar: AppBar(title: Text(title)),
+      body: Center(
+        child: Text(
+          title,
+          style: const TextStyle(fontSize: 22),
+        ),
       ),
     );
   }
