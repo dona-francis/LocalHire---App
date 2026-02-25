@@ -35,7 +35,7 @@ class NotificationAction {
 }
 
 class NotificationScreen extends StatelessWidget {
-  const NotificationScreen({Key? key}) : super(key: key);
+  const NotificationScreen({super.key});
 
   // Sample notification data
   static List<NotificationItem> notifications = [

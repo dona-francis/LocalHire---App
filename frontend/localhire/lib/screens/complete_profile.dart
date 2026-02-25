@@ -195,7 +195,7 @@ class _CompleteProfileScreenState
                       children: [
                         _label("Gender"),
                         DropdownButtonFormField<String>(
-                          value: _selectedGender,
+                          initialValue: _selectedGender,
                           decoration:
                               _inputDecoration(
                                   "Select"),
