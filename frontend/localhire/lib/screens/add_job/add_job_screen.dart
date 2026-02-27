@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'step1.dart';
 import 'step2.dart';
@@ -130,7 +131,7 @@ class _AddJobScreenState extends State<AddJobScreen> {
           ),
 
           Step6(
-            onNext: submitJob,
+            onNext:(){},
             jobData: jobData,
           ),
         ],

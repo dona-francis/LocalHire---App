@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'apply_screen.dart';
 import 'job_profile_screen.dart';
@@ -111,6 +112,8 @@ class JobDetailsScreen extends StatelessWidget {
             _buildCard("Salary", "₹ ${job["salary"] ?? "0"}"),
             _buildCard("Date", job["date"] ?? ""),
             _buildCard("Posted", job["time"] ?? ""),
+            _buildCard("Description", job["description"] ?? "Not provided"),
+
 
             const Spacer(),
 

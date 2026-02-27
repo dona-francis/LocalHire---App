@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'message_screen.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({Key? key}) : super(key: key);
+  const ChatScreen({super.key});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -11,10 +11,11 @@ class ChatScreen extends StatefulWidget {
 class ChatUser {
   final String name;
   final String message;
-  final String time;
+  String time;
   final bool isUnread;
   final int unreadCount;
-  bool isPinned; // Added pin state
+  final String? profileImage; // 🔥 Added
+  bool isPinned;
 
   ChatUser({
     required this.name,
@@ -22,73 +23,104 @@ class ChatUser {
     required this.time,
     required this.isUnread,
     required this.unreadCount,
-    this.isPinned = false, // default not pinned
+    this.profileImage,
+    this.isPinned = false,
   });
 }
 
 class _ChatScreenState extends State<ChatScreen> {
   bool showUnreadOnly = false;
   String searchQuery = "";
+  final int maxPinned = 3;
 
   final List<ChatUser> users = [
     ChatUser(
-        name: "Ranveer Singh",
-        message: "When can you start?",
-        time: "2m ago",
-        isUnread: true,
-        unreadCount: 1),
+      name: "Ranveer Singh",
+      message: "When can you start?",
+      time: "2m ago",
+      isUnread: true,
+      unreadCount: 1,
+      profileImage: null, // can add network URL later
+    ),
     ChatUser(
-        name: "Priya Sharma",
-        message: "The budget looks good.",
-        time: "1h ago",
-        isUnread: false,
-        unreadCount: 0),
+      name: "Priya Sharma",
+      message: "The budget looks good.",
+      time: "1h ago",
+      isUnread: false,
+      unreadCount: 0,
+      profileImage: null,
+    ),
     ChatUser(
-        name: "Kate Issac",
-        message: "Please share your portfolio.",
-        time: "3h ago",
-        isUnread: false,
-        unreadCount: 0),
+      name: "Ananya Singh",
+      message: "Please share your portfolio.",
+      time: "3h ago",
+      isUnread: false,
+      unreadCount: 0,
+      profileImage: null,
+    ),
     ChatUser(
-        name: "Samuel Lee",
-        message: "Interview scheduled for tomorrow.",
-        time: "1d ago",
-        isUnread: false,
-        unreadCount: 0),
+      name: "Vikram Sai",
+      message: "Interview scheduled for tomorrow.",
+      time: "1d ago",
+      isUnread: false,
+      unreadCount: 0,
+      profileImage: null,
+    ),
     ChatUser(
-        name: "Peter Parker",
-        message: "I've sent the contract details.",
-        time: "2d ago",
-        isUnread: false,
-        unreadCount: 0),
+      name: "Rahul Verma",
+      message: "I've sent the contract details.",
+      time: "2d ago",
+      isUnread: false,
+      unreadCount: 0,
+      profileImage: null,
+    ),
   ];
 
   void togglePin(ChatUser user) {
-    final pinnedCount = users.where((u) => u.isPinned).length;
+    int pinnedCount =
+        users.where((element) => element.isPinned).length;
+
+    if (!user.isPinned && pinnedCount >= maxPinned) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("You can only pin up to 3 chats."),
+        ),
+      );
+      return;
+    }
 
     setState(() {
-      if (user.isPinned) {
-        // unpin
-        user.isPinned = false;
-      } else {
-        if (pinnedCount >= 3) {
-          // show info message
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("You can only pin up to 3 chats."),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        } else {
-          user.isPinned = true;
-        }
-      }
+      user.isPinned = !user.isPinned;
     });
+  }
+
+  void showPinDialog(ChatUser user) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(user.isPinned ? "Unpin Chat" : "Pin Chat"),
+        content: Text(user.isPinned
+            ? "Do you want to unpin this chat?"
+            : "Do you want to pin this chat?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              togglePin(user);
+            },
+            child: const Text("Confirm"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Filtered based on search and unread
     List<ChatUser> filteredUsers = users.where((user) {
       final matchesSearch =
           user.name.toLowerCase().contains(searchQuery.toLowerCase());
@@ -96,11 +128,9 @@ class _ChatScreenState extends State<ChatScreen> {
       return matchesSearch && matchesUnread;
     }).toList();
 
-    // Sort pinned chats on top
     filteredUsers.sort((a, b) {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return 0;
+      if (a.isPinned == b.isPinned) return 0;
+      return a.isPinned ? -1 : 1;
     });
 
     return Scaffold(
@@ -121,7 +151,7 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
 
-          // 🔍 Search Bar
+          // 🔍 Search
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -143,7 +173,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-          // 🔘 Toggle All / Unread
+          // Toggle
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
@@ -161,12 +191,14 @@ class _ChatScreenState extends State<ChatScreen> {
                         });
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: showUnreadOnly
                               ? Colors.transparent
-                              : const Color.fromARGB(255, 255, 255, 255),
-                          borderRadius: BorderRadius.circular(20),
+                              : Colors.white,
+                          borderRadius:
+                              BorderRadius.circular(20),
                         ),
                         child: const Center(child: Text("All")),
                       ),
@@ -180,12 +212,14 @@ class _ChatScreenState extends State<ChatScreen> {
                         });
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: showUnreadOnly
                               ? Colors.white
                               : Colors.transparent,
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius:
+                              BorderRadius.circular(20),
                         ),
                         child: const Center(child: Text("Unread")),
                       ),
@@ -206,41 +240,57 @@ class _ChatScreenState extends State<ChatScreen> {
                 final user = filteredUsers[index];
 
                 return GestureDetector(
+                  onLongPress: () => showPinDialog(user),
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => MessageScreen(userName: user.name),
-                        fullscreenDialog: false,
+                        builder: (_) =>
+                            MessageScreen(userName: user.name),
                       ),
                     );
                   },
-                  onLongPress: () => togglePin(user), // 🔥 pin/unpin on long press
                   child: Container(
-                    margin:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    margin: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: const Color(0xFFECE6D8),
                       borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
+                        )
+                      ],
                     ),
                     child: Row(
                       children: [
+
+                        // 🔥 Profile Picture
                         CircleAvatar(
                           radius: 28,
-                          backgroundColor: const Color.fromARGB(255, 244,168, 37),
-                          child: Text(
-                            user.name[0],
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20),
-                          ),
+                          backgroundColor: Colors.grey[300],
+                          backgroundImage: user.profileImage != null
+                              ? NetworkImage(user.profileImage!)
+                              : null,
+                          child: user.profileImage == null
+                              ? Text(
+                                  user.name[0],
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20),
+                                )
+                              : null,
                         ),
+
                         const SizedBox(width: 12),
 
                         Expanded(
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
                             children: [
                               Text(
                                 user.name,
@@ -261,38 +311,52 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
 
                         Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                          crossAxisAlignment:
+                              CrossAxisAlignment.end,
                           children: [
-                            Text(
-                              user.time,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey),
+                            Row(
+                              children: [
+                                if (user.isPinned)
+                                  const Padding(
+                                    padding:
+                                        EdgeInsets.only(right: 6),
+                                    child: Icon(
+                                      Icons.push_pin,
+                                      size: 16,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                Text(
+                                  user.time,
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 6),
                             if (user.isUnread)
                               Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: const BoxDecoration(
-                                  color: Color.fromARGB(255, 244, 168, 37),
-                                  shape: BoxShape.circle,
+                                padding:
+                                    const EdgeInsets.all(6),
+                                decoration:
+                                    const BoxDecoration(
+                                  color:
+                                      Color(0xFFF4A825),
+                                  shape:
+                                      BoxShape.circle,
                                 ),
                                 child: Text(
-                                  user.unreadCount.toString(),
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12),
+                                  user.unreadCount
+                                      .toString(),
+                                  style:
+                                      const TextStyle(
+                                    color:
+                                        Colors.white,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                              ),
-                            if (user.isPinned)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 6),
-                                child: Icon(
-                                  Icons.push_pin,
-                                  size: 16,
-                                  color: Colors.orange,
-                                ),
-                              ),
+                              )
                           ],
                         )
                       ],

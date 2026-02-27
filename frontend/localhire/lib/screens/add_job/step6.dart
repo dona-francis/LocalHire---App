@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'add_job_screen.dart';
 
 class Step6 extends StatelessWidget {
-  final VoidCallback onNext;
+  final VoidCallback onNext; // kept but not used (to avoid breaking structure)
   final JobData jobData;
 
   const Step6({
@@ -25,8 +25,7 @@ class Step6 extends StatelessWidget {
             padding:
                 const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
                 /// Progress Bar (All complete)
@@ -54,8 +53,7 @@ class Step6 extends StatelessWidget {
                   "Review Task Summary",
                   style: TextStyle(
                       fontSize: 22,
-                      fontWeight:
-                          FontWeight.bold),
+                      fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 6),
@@ -69,6 +67,7 @@ class Step6 extends StatelessWidget {
 
                 const SizedBox(height: 30),
 
+                /// SUMMARY CARD
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
@@ -79,32 +78,34 @@ class Step6 extends StatelessWidget {
                     children: [
 
                       summaryItem(
-                          "Job Title",
-                          jobData.title.isEmpty
-                              ? "Not Provided"
-                              : jobData.title),
+                        "Job Title",
+                        jobData.title.isEmpty
+                            ? "Not Provided"
+                            : jobData.title,
+                      ),
 
                       summaryItem(
-                          "Description",
-                          jobData.description
-                                  .isEmpty
-                              ? "Not Provided"
-                              : jobData
-                                  .description),
+                        "Description",
+                        jobData.description.isEmpty
+                            ? "Not Provided"
+                            : jobData.description,
+                      ),
 
                       summaryItem(
-                          "Location",
-                          "${jobData.locationType.toUpperCase()} - ${jobData.location}"),
+                        "Location",
+                        "${jobData.locationType.toUpperCase()} - ${jobData.location}",
+                      ),
 
                       summaryItem(
-                          "Date",
-                          formatDate(
-                              jobData.date)),
+                        "Date",
+                        formatDate(jobData.date),
+                      ),
 
                       summaryItem(
-                          "Budget",
-                          "₹${jobData.budget}",
-                          isBold: true),
+                        "Budget",
+                        "₹${jobData.budget}",
+                        isBold: true,
+                      ),
                     ],
                   ),
                 ),
@@ -113,35 +114,43 @@ class Step6 extends StatelessWidget {
           ),
         ),
 
-        /// Post Button
+        /// POST BUTTON
         Padding(
-          padding:
-              const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
           child: SizedBox(
             width: double.infinity,
             height: 55,
             child: ElevatedButton(
-              onPressed: onNext,
-              style: ElevatedButton
-                  .styleFrom(
-                backgroundColor:
-                    const Color(
-                        0xFFF2B84B),
-                shape:
-                    RoundedRectangleBorder(
+              onPressed: () {
+                Map<String, dynamic> newJob = {
+                  "type": jobData.locationType.toUpperCase(),
+                  "title": jobData.title,
+                  "location": jobData.location,
+                  "salary":jobData.budget,
+                  "date": formatDate(jobData.date),
+                  "time": "Just now",
+                  "description": jobData.description,
+                  "postedByName": "You",
+                  "postedByImage":
+                      "https://i.pravatar.cc/150?img=3",
+                };
+
+                Navigator.pop(context, newJob);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF2B84B),
+                shape: RoundedRectangleBorder(
                   borderRadius:
-                      BorderRadius
-                          .circular(20),
+                      BorderRadius.circular(20),
                 ),
               ),
               child: const Text(
                 "Post Task",
                 style: TextStyle(
-                    fontSize: 16,
-                    fontWeight:
-                        FontWeight.bold,
-                    color:
-                        Colors.black),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
               ),
             ),
           ),
@@ -157,8 +166,9 @@ class Step6 extends StatelessWidget {
       decoration: const BoxDecoration(
         border: Border(
           bottom: BorderSide(
-              color: Colors.white,
-              width: 1),
+            color: Colors.white,
+            width: 1,
+          ),
         ),
       ),
       child: Column(

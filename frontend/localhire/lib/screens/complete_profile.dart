@@ -298,7 +298,7 @@ final hashedPassword = authService.hashPassword(widget.password);
                       children: [
                         _label("Gender"),
                         DropdownButtonFormField<String>(
-                          value: _selectedGender,
+                          initialValue: _selectedGender,
                           decoration:
                               _inputDecoration(
                                   "Select"),

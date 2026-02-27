@@ -3,6 +3,8 @@ import 'saved_screen.dart';
 import 'job_details_screen.dart';
 import 'add_job/add_job_screen.dart';
 import 'chat_screen.dart';
+import 'notification_screen.dart';
+import 'add_job/add_job_screen.dart'; // ✅ Added
 import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,6 +20,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String selectedSort = "None";
   String searchText = "";
 
+  int unreadNotifications = 3; // Example unread count
+
   List<Map<String, dynamic>> jobs = [
     {
       "type": "FULL-TIME",
@@ -26,6 +30,9 @@ class _HomeScreenState extends State<HomeScreen> {
       "salary": 1800,
       "date": "Nov 25, 2026",
       "time": "2h ago",
+      "description": "Assist in warehouse operations and inventory handling.",
+      "postedByName": "Rahul Sharma",
+      "postedByImage": "https://i.pravatar.cc/150?img=5",
     },
     {
       "type": "CONTRACT",
@@ -34,6 +41,9 @@ class _HomeScreenState extends State<HomeScreen> {
       "salary": 1200,
       "date": "Nov 25, 2026",
       "time": "5h ago",
+      "description": "Maintain garden and landscaping work.",
+      "postedByName": "Anita Verma",
+      "postedByImage": "https://i.pravatar.cc/150?img=6",
     },
     {
       "type": "PART-TIME",
@@ -42,12 +52,15 @@ class _HomeScreenState extends State<HomeScreen> {
       "salary": 2250,
       "date": "Nov 25, 2026",
       "time": "1d ago",
+      "description": "Deliver packages safely within city limits.",
+      "postedByName": "Amit Singh",
+      "postedByImage": "https://i.pravatar.cc/150?img=7",
     },
   ];
 
   @override
   Widget build(BuildContext context) {
-    List filteredJobs = jobs.where((job) {
+    List<Map<String, dynamic>> filteredJobs = jobs.where((job) {
       final matchesSearch =
           job["title"].toLowerCase().contains(searchText.toLowerCase());
 
@@ -71,30 +84,73 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 10),
 
             /// HEADER
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: const [
-                  Icon(Icons.location_on, color: Color(0xFFFFB544)),
-                  SizedBox(width: 5),
-                  Expanded(
+  Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: Row(
+      children: [
+        const Icon(Icons.location_on, color: Color(0xFFFFB544)),
+        const SizedBox(width: 5),
+
+        const Expanded(
+          child: Text(
+            "Mumbai, Maharashtra",
+            style: TextStyle(fontWeight: FontWeight.w600),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+
+        const Text(
+          "LocalHire",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+
+        const Spacer(),
+
+        /// ✅ Updated notification bell
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const NotificationScreen(),
+              ),
+            );
+          },
+          child: Stack(
+            children: [
+              const Icon(Icons.notifications_none, size: 28),
+
+              if (unreadNotifications > 0)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 12,
+                      minHeight: 12,
+                    ),
                     child: Text(
-                      "Mumbai, Maharashtra",
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis,
+                      '$unreadNotifications',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                  Text(
-                    "LocalHire",
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  Spacer(),
-                  Icon(Icons.notifications_none, size: 28),
-                ],
-              ),
-            ),
-
+                ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  ),
             const SizedBox(height: 15),
 
             /// SEARCH BAR
@@ -182,28 +238,38 @@ class _HomeScreenState extends State<HomeScreen> {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(0xFFFFB544),
         unselectedItemColor: Colors.grey,
-        onTap: (index) {
+        onTap: (index) async {
           if (index == 1) {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SavedScreen()),
             );
-          } else if (index == 2) {
-            Navigator.push(
+          } 
+          else if (index == 2) {
+            final newJob = await Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const AddJobScreen()),
             );
-          } else if (index == 3) {
+
+            if (newJob != null) {
+              setState(() {
+                jobs.insert(0, newJob);
+              });
+            }
+          } 
+          else if (index == 3) {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ChatScreen()),
             );
-          } else if (index == 4) {
+          } 
+          else if (index == 4) {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ProfileScreen()),
             );
-          } else {
+          } 
+          else {
             setState(() {
               currentIndex = index;
             });
