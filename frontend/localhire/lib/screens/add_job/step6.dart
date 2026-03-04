@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'add_job_screen.dart';
 
 class Step6 extends StatelessWidget {
-  final VoidCallback onNext; // kept but not used (to avoid breaking structure)
+  final VoidCallback onNext;
   final JobData jobData;
+  final String userId;
 
   const Step6({
     super.key,
     required this.onNext,
     required this.jobData,
+    required this.userId,
   });
 
   String formatDate(DateTime? date) {
@@ -27,8 +31,6 @@ class Step6 extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                /// Progress Bar (All complete)
                 Row(
                   children: List.generate(
                     6,
@@ -46,28 +48,21 @@ class Step6 extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 30),
-
                 const Text(
                   "Review Task Summary",
                   style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold),
                 ),
-
                 const SizedBox(height: 6),
-
                 const Text(
                   "Please check all details before posting.",
                   style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey),
                 ),
-
                 const SizedBox(height: 30),
-
-                /// SUMMARY CARD
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
@@ -76,31 +71,26 @@ class Step6 extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-
                       summaryItem(
                         "Job Title",
                         jobData.title.isEmpty
                             ? "Not Provided"
                             : jobData.title,
                       ),
-
                       summaryItem(
                         "Description",
                         jobData.description.isEmpty
                             ? "Not Provided"
                             : jobData.description,
                       ),
-
                       summaryItem(
                         "Location",
                         "${jobData.locationType.toUpperCase()} - ${jobData.location}",
                       ),
-
                       summaryItem(
                         "Date",
                         formatDate(jobData.date),
                       ),
-
                       summaryItem(
                         "Budget",
                         "₹${jobData.budget}",
@@ -121,21 +111,37 @@ class Step6 extends StatelessWidget {
             width: double.infinity,
             height: 55,
             child: ElevatedButton(
-              onPressed: () {
-                Map<String, dynamic> newJob = {
-                  "type": jobData.locationType.toUpperCase(),
-                  "title": jobData.title,
-                  "location": jobData.location,
-                  "salary":jobData.budget,
-                  "date": formatDate(jobData.date),
-                  "time": "Just now",
-                  "description": jobData.description,
-                  "postedByName": "You",
-                  "postedByImage":
-                      "https://i.pravatar.cc/150?img=3",
-                };
+              onPressed: () async {
+           try{
+  
 
-                Navigator.pop(context, newJob);
+                  await FirebaseFirestore.instance
+                      .collection("jobs")
+                      .add({
+                    "type": jobData.locationType.toUpperCase(),
+                    "title": jobData.title,
+                    "location": jobData.location,
+                    "salary": jobData.budget,
+                    "date": formatDate(jobData.date),
+                    "description": jobData.description,
+                    "postedBy": userId,
+                    "createdAt": FieldValue.serverTimestamp(),
+                  });
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Job Posted Successfully"),
+                    ),
+                  );
+
+                  Navigator.pop(context); // Go back
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Error: $e"),
+                    ),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFF2B84B),

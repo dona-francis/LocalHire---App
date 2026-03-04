@@ -18,7 +18,13 @@ class JobData {
 }
 
 class AddJobScreen extends StatefulWidget {
-  const AddJobScreen({super.key});
+
+  final String userId; // ✅ ADD THIS
+
+  const AddJobScreen({
+    super.key,
+    required this.userId, // ✅ ADD THIS
+  });
 
   @override
   State<AddJobScreen> createState() => _AddJobScreenState();
@@ -27,18 +33,12 @@ class AddJobScreen extends StatefulWidget {
 class _AddJobScreenState extends State<AddJobScreen> {
   final PageController _controller = PageController();
 
-  /// 🔥 Shared data object
   JobData jobData = JobData();
-
   int currentPage = 0;
 
-  /// 👉 Go to next step
   void nextStep() {
     if (currentPage < 5) {
-      setState(() {
-        currentPage++;
-      });
-
+      setState(() => currentPage++);
       _controller.animateToPage(
         currentPage,
         duration: const Duration(milliseconds: 300),
@@ -47,13 +47,9 @@ class _AddJobScreenState extends State<AddJobScreen> {
     }
   }
 
-  /// 👉 Go to previous step
   void previousStep() {
     if (currentPage > 0) {
-      setState(() {
-        currentPage--;
-      });
-
+      setState(() => currentPage--);
       _controller.animateToPage(
         currentPage,
         duration: const Duration(milliseconds: 300),
@@ -64,27 +60,11 @@ class _AddJobScreenState extends State<AddJobScreen> {
     }
   }
 
-  /// 🚀 Final Submit
-  void submitJob() {
-    debugPrint("====== JOB DATA ======");
-    debugPrint("Title: ${jobData.title}");
-    debugPrint("Description: ${jobData.description}");
-    debugPrint("Location Type: ${jobData.locationType}");
-    debugPrint("Location: ${jobData.location}");
-    debugPrint("Date: ${jobData.date}");
-    debugPrint("Budget: ${jobData.budget}");
-
-    // Later → send to backend here
-
-    Navigator.pop(context);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
 
-      /// 🔝 App Bar
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -99,7 +79,6 @@ class _AddJobScreenState extends State<AddJobScreen> {
         centerTitle: true,
       ),
 
-      /// 📄 Steps
       body: PageView(
         controller: _controller,
         physics: const NeverScrollableScrollPhysics(),
@@ -131,8 +110,9 @@ class _AddJobScreenState extends State<AddJobScreen> {
           ),
 
           Step6(
-            onNext:(){},
+            onNext: () {},
             jobData: jobData,
+            userId: widget.userId, // ✅ PASS IT CORRECTLY
           ),
         ],
       ),
