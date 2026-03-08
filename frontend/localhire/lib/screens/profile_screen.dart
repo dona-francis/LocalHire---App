@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userId;
@@ -48,20 +50,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> fetchReviews() async {
-
-    final query = await FirebaseFirestore.instance
-        .collection("reviews")
-        .where("toUserId", isEqualTo: widget.userId)
-        .get();
-
+    print("Profile userId: ${widget.userId}");
+   final query = await FirebaseFirestore.instance
+    .collection("reviews")
+    .where("toUserId", isEqualTo: widget.userId)
+    .orderBy("createdAt", descending: true)
+    .limit(3)
+    .get();
+print("Total reviews fetched: ${query.docs.length}");
     double total = 0;
     reviews.clear();
 
     for (var doc in query.docs) {
-      final data = doc.data();
-      reviews.add(data);
-      total += (data["rating"] ?? 0);
-    }
+
+    final data = doc.data();
+
+    // fetch reviewer name
+    final userDoc = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(data["fromUserId"])
+        .get();
+
+    final reviewerName = userDoc.data()?["name"] ?? "Anonymous";
+
+    reviews.add({
+      "comment": data["comment"],
+      "rating": data["rating"],
+      "reviewerName": reviewerName
+    });
+
+    total += (data["rating"] ?? 0);
+  }
 
     if (reviews.isNotEmpty) {
       averageRating = total / reviews.length;
@@ -407,6 +426,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
             "${reviews.length} Reviews",
             style: const TextStyle(color: Colors.grey),
           ),
+          const SizedBox(height: 15),
+
+...reviews.map((review) {
+
+  final message = review["comment"] ?? "";
+  final rating = review["rating"] ?? 0;
+  final reviewer = review["reviewerName"] ?? "Anonymous";
+
+  return Container(
+    margin: const EdgeInsets.only(top: 10),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.grey.shade100,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+
+        Row(
+          children: [
+            Text(
+              reviewer,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Spacer(),
+            Row(
+              children: List.generate(5, (index) {
+                return Icon(
+                  index < rating.round()
+                      ? Icons.star
+                      : Icons.star_border,
+                  size: 16,
+                  color: const Color(0xFFFFB544),
+                );
+              }),
+            )
+          ],
+        ),
+
+        const SizedBox(height: 6),
+
+        Text(
+          message,
+          style: const TextStyle(fontSize: 13),
+        ),
+
+      ],
+    ),
+  );
+
+}).toList(),
         ],
       ),
     );
@@ -425,24 +498,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _bigButton(String text, Color color) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          padding:
-              const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-        ),
-        onPressed: () {},
-        child: Text(text,
-            style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color:Colors.white)),
+ Widget _bigButton(String text, Color color) {
+  return SizedBox(
+    width: double.infinity,
+    child: ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14)),
       ),
-    );
-  }
+      onPressed: () async {
+
+        if (text == "LOGOUT") {
+
+          await FirebaseAuth.instance.signOut();
+
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const LoginScreen(),
+            ),
+            (route) => false,
+          );
+        }
+
+      },
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          color: Colors.white,
+        ),
+      ),
+    ),
+  );
+}
 }
