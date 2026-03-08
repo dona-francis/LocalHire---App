@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'home_screen.dart';   // Make sure this exists
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -39,15 +39,12 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
-
-        // ✅ Back arrow functional
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () {
             Navigator.pop(context);
           },
         ),
-
         centerTitle: true,
         title: const Text(
           "Log In",
@@ -85,7 +82,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 30),
 
-              // Username
               const Text(
                 "Username",
                 style: TextStyle(
@@ -109,7 +105,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 20),
 
-              // Password
               const Text(
                 "Password",
                 style: TextStyle(
@@ -208,33 +203,48 @@ class _LoginScreenState extends State<LoginScreen> {
   // 🔐 LOGIN LOGIC
   void _loginUser() async {
 
-  if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return;
 
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
 
-  String? userId = await _authService.loginUser(
-    username: _usernameController.text.trim(),
-    password: _passwordController.text.trim(),
-  );
+    try {
 
-  setState(() => _isLoading = false);
+      String? userId = await _authService.loginUser(
+        username: _usernameController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
-  if (userId != null) {
+      if (!mounted) return;
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => HomeScreen(userId: userId),
-      ),
-    );
+      setState(() => _isLoading = false);
 
-  } else {
+      if (userId != null) {
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Invalid username or password"),
-      ),
-    );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomeScreen(userId: userId),
+          ),
+        );
+
+      } else {
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Invalid username or password"),
+          ),
+        );
+      }
+
+    } catch (e) {
+
+      setState(() => _isLoading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Something went wrong"),
+        ),
+      );
+    }
   }
-}
 }

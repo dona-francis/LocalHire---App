@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'home_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
@@ -51,7 +50,7 @@ class _CompleteProfileScreenState
 
   final ImagePicker _picker = ImagePicker();
 
-  // 🔐 Encryption Key (for project use only)
+  // 🔐 Encryption Key
   final _key =
       encrypt.Key.fromUtf8('12345678901234567890123456789012');
   final _iv = encrypt.IV.fromLength(16);
@@ -61,8 +60,6 @@ class _CompleteProfileScreenState
     final encrypted = encrypter.encrypt(data, iv: _iv);
     return encrypted.base64;
   }
-
-  // -------- IMAGE PICKER --------
 
   Future<void> _pickProfileImage() async {
     final picked =
@@ -86,26 +83,28 @@ class _CompleteProfileScreenState
     }
   }
 
-  // -------- SAVE PROFILE --------
-
   Future<void> _saveProfile() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("User not logged in")),
-      );
-      return;
-    }
 
     setState(() => _isLoading = true);
 
     try {
+
+      final authService = AuthService();
+      final hashedPassword =
+          authService.hashPassword(widget.password);
+
+      // 🔥 Create Firestore document with auto ID
+      final userDoc = FirebaseFirestore.instance
+          .collection("users")
+          .doc();
+
+      final userId = userDoc.id;
+
       // Upload Profile Image
       final profileRef = FirebaseStorage.instance
           .ref()
           .child("profile_images")
-          .child(user.uid)
+          .child(userId)
           .child(p.basename(_profileImage!.path));
 
       await profileRef.putFile(_profileImage!);
@@ -115,7 +114,7 @@ class _CompleteProfileScreenState
       final idRef = FirebaseStorage.instance
           .ref()
           .child("id_proofs")
-          .child(user.uid)
+          .child(userId)
           .child(p.basename(_idImage!.path));
 
       await idRef.putFile(_idImage!);
@@ -123,35 +122,32 @@ class _CompleteProfileScreenState
 
       // Encrypt ID URL
       final encryptedId = encryptData(idUrl);
-final authService = AuthService();
-final hashedPassword = authService.hashPassword(widget.password);
+
       // Save to Firestore
-      await FirebaseFirestore.instance
-    .collection("users")
-    .doc(user.uid)
-    .set({
-  "username": widget.username,
-  "password": hashedPassword, 
-  "phone": widget.phone,
-  "name": _nameController.text.trim(),
-  "age": int.parse(_ageController.text.trim()),
-  "gender": _selectedGender,
-  "location": _locationController.text.trim(),
-  "skills": skills,
-  "profileImage": profileUrl,
-  "idProof": encryptedId,
-  "verificationStatus": "pending",
-  "createdAt": Timestamp.now(),
-});
+      await userDoc.set({
+        "username": widget.username,
+        "password": hashedPassword,
+        "phone": widget.phone,
+        "name": _nameController.text.trim(),
+        "age": int.parse(_ageController.text.trim()),
+        "gender": _selectedGender,
+        "location": _locationController.text.trim(),
+        "skills": skills,
+        "profileImage": profileUrl,
+        "idProof": encryptedId,
+        "verificationStatus": "pending",
+        "createdAt": Timestamp.now(),
+      });
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-           builder: (context) => HomeScreen(userId: user.uid),
+          builder: (context) => HomeScreen(userId: userId),
         ),
       );
 
     } catch (e) {
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );
@@ -159,8 +155,6 @@ final hashedPassword = authService.hashPassword(widget.password);
 
     setState(() => _isLoading = false);
   }
-
-  // -------- ADD SKILL --------
 
   void _addSkill() {
     String skill = _skillController.text.trim();
@@ -428,67 +422,6 @@ final hashedPassword = authService.hashPassword(widget.password);
 
               const SizedBox(height: 30),
 
-              const Text(
-                "ADD SKILLS",
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey),
-              ),
-
-              const SizedBox(height: 10),
-
-              Wrap(
-                spacing: 8,
-                children: skills
-                    .map(
-                      (skill) => Chip(
-                        label: Text(skill),
-                        deleteIcon:
-                            const Icon(
-                                Icons.close,
-                                size: 18),
-                        onDeleted: () {
-                          setState(() {
-                            skills.remove(skill);
-                          });
-                        },
-                      ),
-                    )
-                    .toList(),
-              ),
-
-              const SizedBox(height: 10),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller:
-                          _skillController,
-                      decoration:
-                          _inputDecoration(
-                              "Type a skill"),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor:
-                        const Color(0xFFF5B544),
-                    child: IconButton(
-                      icon: const Icon(
-                          Icons.add,
-                          color:
-                              Colors.white),
-                      onPressed: _addSkill,
-                    ),
-                  )
-                ],
-              ),
-
-              const SizedBox(height: 30),
-
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -500,12 +433,9 @@ final hashedPassword = authService.hashPassword(widget.password);
                               .currentState!
                               .validate()) {
 
-                            if (_profileImage ==
-                                    null ||
-                                _idImage ==
-                                    null) {
-                              ScaffoldMessenger.of(
-                                      context)
+                            if (_profileImage == null ||
+                                _idImage == null) {
+                              ScaffoldMessenger.of(context)
                                   .showSnackBar(
                                 const SnackBar(
                                     content: Text(
@@ -520,28 +450,23 @@ final hashedPassword = authService.hashPassword(widget.password);
                   style:
                       ElevatedButton.styleFrom(
                     backgroundColor:
-                        const Color(
-                            0xFFF5B544),
+                        const Color(0xFFF5B544),
                     shape:
                         RoundedRectangleBorder(
                       borderRadius:
-                          BorderRadius.circular(
-                              12),
+                          BorderRadius.circular(12),
                     ),
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(
-                          color:
-                              Colors.black)
+                          color: Colors.black)
                       : const Text(
                           "Save & Continue",
                           style: TextStyle(
                               fontSize: 16,
                               fontWeight:
-                                  FontWeight
-                                      .w600,
-                              color:
-                                  Colors.black),
+                                  FontWeight.w600,
+                              color: Colors.black),
                         ),
                 ),
               ),

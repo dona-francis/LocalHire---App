@@ -27,9 +27,7 @@ class LocalHireApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-
-      home:const SignUpScreen()
-      
+      home: const SignUpScreen(), // ✅ ALWAYS START FROM SIGNUP
     );
   }
 }

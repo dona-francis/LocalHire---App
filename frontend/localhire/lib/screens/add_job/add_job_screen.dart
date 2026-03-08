@@ -20,7 +20,13 @@ class JobData {
 }
 
 class AddJobScreen extends StatefulWidget {
-  const AddJobScreen({super.key});
+
+  final String userId; // ✅ ADD THIS
+
+  const AddJobScreen({
+    super.key,
+    required this.userId, // ✅ ADD THIS
+  });
 
   @override
   State<AddJobScreen> createState() => _AddJobScreenState();
@@ -30,15 +36,11 @@ class _AddJobScreenState extends State<AddJobScreen> {
   final PageController _controller = PageController();
 
   JobData jobData = JobData();
-
   int currentPage = 0;
 
   void nextStep() {
     if (currentPage < 5) {
-      setState(() {
-        currentPage++;
-      });
-
+      setState(() => currentPage++);
       _controller.animateToPage(
         currentPage,
         duration: const Duration(milliseconds: 300),
@@ -49,10 +51,7 @@ class _AddJobScreenState extends State<AddJobScreen> {
 
   void previousStep() {
     if (currentPage > 0) {
-      setState(() {
-        currentPage--;
-      });
-
+      setState(() => currentPage--);
       _controller.animateToPage(
         currentPage,
         duration: const Duration(milliseconds: 300),
@@ -62,6 +61,7 @@ class _AddJobScreenState extends State<AddJobScreen> {
       Navigator.pop(context);
     }
   }
+
 
   void submitJob() {
     debugPrint("====== JOB DATA ======");
@@ -75,6 +75,7 @@ class _AddJobScreenState extends State<AddJobScreen> {
 
     Navigator.pop(context);
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -126,8 +127,9 @@ class _AddJobScreenState extends State<AddJobScreen> {
           ),
 
           Step6(
-            onNext:(){},
+            onNext: () {},
             jobData: jobData,
+            userId: widget.userId, // ✅ PASS IT CORRECTLY
           ),
         ],
       ),
