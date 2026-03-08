@@ -16,193 +16,248 @@ class Step2 extends StatefulWidget {
 }
 
 class _Step2State extends State<Step2> {
-  final TextEditingController descriptionController =
+  final TextEditingController _descriptionController =
       TextEditingController();
 
-  int workers = 1;
+  int wordCount = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    descriptionController.text =
-        widget.jobData.description;
+  void _updateWordCount(String text) {
+    setState(() {
+      wordCount = text.trim().isEmpty
+          ? 0
+          : text.trim().split(RegExp(r'\s+')).length;
+      widget.jobData.description = text;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
 
-                /// Progress Bar (Step 2 Active)
-                Row(
-                  children: List.generate(
-                    6,
-                    (index) => Expanded(
-                      child: Container(
-                        margin:
-                            const EdgeInsets.symmetric(horizontal: 2),
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: index <= 1
-                              ? const Color(0xFFF2B84B)
-                              : Colors.grey.shade300,
-                          borderRadius:
-                              BorderRadius.circular(10),
-                        ),
+              /// Progress Bar
+              Row(
+                children: List.generate(
+                  6,
+                  (index) => Expanded(
+                    child: Container(
+                      margin:
+                          const EdgeInsets.symmetric(horizontal: 2),
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: index < 2
+                            ? const Color(0xFFF2B84B)
+                            : Colors.grey.shade300,
+                        borderRadius:
+                            BorderRadius.circular(10),
                       ),
                     ),
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 30),
+              const SizedBox(height: 32),
 
-                const Text(
-                  "Describe your task in detail",
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold),
+              /// Title
+              const Text(
+                "Describe your task in detail",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF4A4A4A),
                 ),
+              ),
 
-                const SizedBox(height: 6),
+              const SizedBox(height: 4),
 
-                const Text(
-                  "Include specific requirements and expectations",
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey),
+              const Text(
+                "Include specific requirements and expectations",
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF757575),
                 ),
+              ),
 
-                const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-                /// Description Box
-                TextField(
-                  controller:
-                      descriptionController,
-                  maxLines: 6,
-                  decoration: InputDecoration(
-                    hintText:
-                        "Describe your task...",
-                    border: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(16),
-                    ),
-                    focusedBorder:
-                        OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(16),
-                      borderSide:
-                          const BorderSide(
-                              color: Color(
-                                  0xFFF2B84B)),
+              /// Description Box
+              Stack(
+                children: [
+                  TextField(
+                    controller: _descriptionController,
+                    maxLines: 7,
+                    onChanged: _updateWordCount,
+                    decoration: InputDecoration(
+                      hintText:
+                          "Describe your task in detail (max 250 words)...",
+                      hintStyle:
+                          const TextStyle(color: Colors.grey),
+                      contentPadding:
+                          const EdgeInsets.all(16),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(20),
+                        borderSide: BorderSide(
+                            color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(20),
+                        borderSide: const BorderSide(
+                            color: Color(0xFFF2B84B),
+                            width: 2),
+                      ),
                     ),
                   ),
+                  Positioned(
+                    bottom: 12,
+                    right: 16,
+                    child: Text(
+                      "$wordCount / 250 words",
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF757575),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 32),
+
+              /// ✅ Instant Job Toggle
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius:
+                      BorderRadius.circular(16),
+                  border: Border.all(
+                      color: Colors.grey.shade200),
                 ),
-
-                const SizedBox(height: 30),
-
-                /// Workers Counter
-                const Text(
-                  "Number of workers needed",
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 10),
-
-                Row(
+                child: Row(
                   mainAxisAlignment:
                       MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      "How many people?",
-                      style: TextStyle(
-                          color: Colors.grey),
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () {
-                            if (workers > 1) {
-                              setState(() {
-                                workers--;
-                              });
-                            }
-                          },
-                          icon: const Icon(
-                              Icons.remove),
-                        ),
+                    Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: const [
                         Text(
-                          workers.toString(),
-                          style:
-                              const TextStyle(
-                            fontSize: 18,
-                            fontWeight:
-                                FontWeight.bold,
+                          "Instant Job",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF4A4A4A),
                           ),
                         ),
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              workers++;
-                            });
-                          },
-                          icon:
-                              const Icon(Icons.add),
+                        SizedBox(height: 4),
+                        Text(
+                          "Workers can apply immediately",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF757575),
+                          ),
                         ),
                       ],
-                    )
+                    ),
+                    Switch(
+                      value:
+                          widget.jobData.isInstantJob,
+                      activeColor:
+                          const Color(0xFFF2B84B),
+                      onChanged: (value) {
+                        setState(() {
+                          widget.jobData.isInstantJob =
+                              value;
+                        });
+                      },
+                    ),
                   ],
                 ),
-              ],
-            ),
-          ),
-        ),
+              ),
 
-        /// Bottom Button
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: SizedBox(
-            width: double.infinity,
-            height: 55,
-            child: ElevatedButton(
-              onPressed: () {
-                widget.jobData.description =
-                    descriptionController.text;
+              const SizedBox(height: 24),
 
-                widget.onNext();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    const Color(0xFFF2B84B),
-                shape:
-                    RoundedRectangleBorder(
+              /// Pro Tip Card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color:
+                      const Color(0xFFF6E7C9)
+                          .withOpacity(0.3),
                   borderRadius:
-                      BorderRadius.circular(
-                          20),
+                      BorderRadius.circular(16),
+                  border: Border.all(
+                    color:
+                        const Color(0xFFF6E7C9),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: const [
+                    Icon(Icons.lightbulb,
+                        color:
+                            Color(0xFFF2B84B)),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        "Pro Tip: Mention the tools needed, details about the workplace, and how many hours it may take.",
+                        style: TextStyle(
+                          fontSize: 13,
+                          color:
+                              Color(0xFF4A4A4A),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: const Text(
-                "Save & Continue",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight:
-                      FontWeight.bold,
-                  color: Colors.black,
+
+              const SizedBox(height: 40),
+
+              /// Save & Continue Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        const Color(0xFFF2B84B),
+                    foregroundColor:
+                        const Color(0xFF4A4A4A),
+                    padding:
+                        const EdgeInsets.symmetric(
+                            vertical: 18),
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                              20),
+                    ),
+                    elevation: 8,
+                  ),
+                  onPressed: widget.onNext,
+                  child: const Text(
+                    "Save & Continue",
+                    style: TextStyle(
+                        fontWeight:
+                            FontWeight.bold),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

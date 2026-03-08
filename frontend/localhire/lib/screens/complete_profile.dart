@@ -147,7 +147,7 @@ final hashedPassword = authService.hashPassword(widget.password);
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => const HomeScreen(),
+           builder: (context) => HomeScreen(userId: user.uid),
         ),
       );
 

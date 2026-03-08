@@ -208,34 +208,33 @@ class _LoginScreenState extends State<LoginScreen> {
   // 🔐 LOGIN LOGIC
   void _loginUser() async {
 
-    if (!_formKey.currentState!.validate()) return;
+  if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
 
-    bool success = await _authService.loginUser(
-      username: _usernameController.text.trim(),
-      password: _passwordController.text.trim(),
+  String? userId = await _authService.loginUser(
+    username: _usernameController.text.trim(),
+    password: _passwordController.text.trim(),
+  );
+
+  setState(() => _isLoading = false);
+
+  if (userId != null) {
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => HomeScreen(userId: userId),
+      ),
     );
 
-    setState(() => _isLoading = false);
+  } else {
 
-    if (success) {
-
-      // ✅ Redirect to HomePage
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const HomeScreen(),
-        ),
-      );
-
-    } else {
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Invalid username or password"),
-        ),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Invalid username or password"),
+      ),
+    );
   }
+}
 }

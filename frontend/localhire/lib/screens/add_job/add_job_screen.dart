@@ -15,6 +15,8 @@ class JobData {
   String location = "";
   DateTime? date;
   int budget = 0;
+
+  bool isInstantJob = false; // ✅ Added
 }
 
 class AddJobScreen extends StatefulWidget {
@@ -27,12 +29,10 @@ class AddJobScreen extends StatefulWidget {
 class _AddJobScreenState extends State<AddJobScreen> {
   final PageController _controller = PageController();
 
-  /// 🔥 Shared data object
   JobData jobData = JobData();
 
   int currentPage = 0;
 
-  /// 👉 Go to next step
   void nextStep() {
     if (currentPage < 5) {
       setState(() {
@@ -47,7 +47,6 @@ class _AddJobScreenState extends State<AddJobScreen> {
     }
   }
 
-  /// 👉 Go to previous step
   void previousStep() {
     if (currentPage > 0) {
       setState(() {
@@ -64,7 +63,6 @@ class _AddJobScreenState extends State<AddJobScreen> {
     }
   }
 
-  /// 🚀 Final Submit
   void submitJob() {
     debugPrint("====== JOB DATA ======");
     debugPrint("Title: ${jobData.title}");
@@ -73,8 +71,7 @@ class _AddJobScreenState extends State<AddJobScreen> {
     debugPrint("Location: ${jobData.location}");
     debugPrint("Date: ${jobData.date}");
     debugPrint("Budget: ${jobData.budget}");
-
-    // Later → send to backend here
+    debugPrint("Instant Job: ${jobData.isInstantJob}"); // ✅ Added
 
     Navigator.pop(context);
   }
@@ -84,7 +81,6 @@ class _AddJobScreenState extends State<AddJobScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
 
-      /// 🔝 App Bar
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -99,7 +95,6 @@ class _AddJobScreenState extends State<AddJobScreen> {
         centerTitle: true,
       ),
 
-      /// 📄 Steps
       body: PageView(
         controller: _controller,
         physics: const NeverScrollableScrollPhysics(),

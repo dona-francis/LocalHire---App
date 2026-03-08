@@ -61,7 +61,7 @@ class AuthService {
   
 
   // 🔑 Login
-  Future<bool> loginUser({
+  Future<String?> loginUser({
   required String username,
   required String password,
 }) async {
@@ -71,12 +71,17 @@ class AuthService {
       .where('username', isEqualTo: username)
       .get();
 
-  if (query.docs.isEmpty) return false;
+  if (query.docs.isEmpty) return null;
 
   final userDoc = query.docs.first;
+
   final storedHash = userDoc['password'];
   final enteredHash = hashPassword(password);
 
-  return storedHash == enteredHash;
+  if (storedHash == enteredHash) {
+    return userDoc.id;   // ✅ return userId
+  }
+
+  return null;
 }
 }

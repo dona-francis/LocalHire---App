@@ -8,7 +8,9 @@ import 'add_job/add_job_screen.dart'; // ✅ Added
 import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String userId;
+
+  const HomeScreen({super.key, required this.userId});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -264,10 +266,13 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           } 
           else if (index == 4) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            );
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => ProfileScreen(userId: widget.userId),
+    ),
+  );
+
           } 
           else {
             setState(() {
