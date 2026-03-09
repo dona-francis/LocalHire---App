@@ -138,6 +138,7 @@ class _CompleteProfileScreenState
         "verificationStatus": "pending",
         "createdAt": Timestamp.now(),
       });
+      await authService.saveSession(userId);
 
       Navigator.pushReplacement(
         context,

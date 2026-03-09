@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/chat_service.dart';
+import '../models/chat_model.dart';
 import 'message_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -8,98 +12,42 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class ChatUser {
-  final String name;
-  final String message;
-  String time;
-  final bool isUnread;
-  final int unreadCount;
-  final String? profileImage; // 🔥 Added
-  bool isPinned;
-
-  ChatUser({
-    required this.name,
-    required this.message,
-    required this.time,
-    required this.isUnread,
-    required this.unreadCount,
-    this.profileImage,
-    this.isPinned = false,
-  });
-}
-
 class _ChatScreenState extends State<ChatScreen> {
+  final ChatService _chatService = ChatService();
   bool showUnreadOnly = false;
   String searchQuery = "";
   final int maxPinned = 3;
+  final Set<String> pinnedChats = {};
 
-  final List<ChatUser> users = [
-    ChatUser(
-      name: "Ranveer Singh",
-      message: "When can you start?",
-      time: "2m ago",
-      isUnread: true,
-      unreadCount: 1,
-      profileImage: null, // can add network URL later
-    ),
-    ChatUser(
-      name: "Priya Sharma",
-      message: "The budget looks good.",
-      time: "1h ago",
-      isUnread: false,
-      unreadCount: 0,
-      profileImage: null,
-    ),
-    ChatUser(
-      name: "Ananya Singh",
-      message: "Please share your portfolio.",
-      time: "3h ago",
-      isUnread: false,
-      unreadCount: 0,
-      profileImage: null,
-    ),
-    ChatUser(
-      name: "Vikram Sai",
-      message: "Interview scheduled for tomorrow.",
-      time: "1d ago",
-      isUnread: false,
-      unreadCount: 0,
-      profileImage: null,
-    ),
-    ChatUser(
-      name: "Rahul Verma",
-      message: "I've sent the contract details.",
-      time: "2d ago",
-      isUnread: false,
-      unreadCount: 0,
-      profileImage: null,
-    ),
-  ];
+  // Get the other user's UID from participants
+  String getOtherUserId(List<String> participants) {
+    final currentUid = FirebaseAuth.instance.currentUser!.uid;
+    return participants.firstWhere((id) => id != currentUid, orElse: () => '');
+  }
 
-  void togglePin(ChatUser user) {
-    int pinnedCount =
-        users.where((element) => element.isPinned).length;
-
-    if (!user.isPinned && pinnedCount >= maxPinned) {
+  void togglePin(String chatId) {
+    if (!pinnedChats.contains(chatId) && pinnedChats.length >= maxPinned) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("You can only pin up to 3 chats."),
-        ),
+        const SnackBar(content: Text("You can only pin up to 3 chats.")),
       );
       return;
     }
-
     setState(() {
-      user.isPinned = !user.isPinned;
+      if (pinnedChats.contains(chatId)) {
+        pinnedChats.remove(chatId);
+      } else {
+        pinnedChats.add(chatId);
+      }
     });
   }
 
-  void showPinDialog(ChatUser user) {
+  void showPinDialog(String chatId) {
+    final isPinned = pinnedChats.contains(chatId);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(user.isPinned ? "Unpin Chat" : "Pin Chat"),
-        content: Text(user.isPinned
+        title: Text(isPinned ? "Unpin Chat" : "Pin Chat"),
+        content: Text(isPinned
             ? "Do you want to unpin this chat?"
             : "Do you want to pin this chat?"),
         actions: [
@@ -110,7 +58,7 @@ class _ChatScreenState extends State<ChatScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              togglePin(user);
+              togglePin(chatId);
             },
             child: const Text("Confirm"),
           ),
@@ -119,20 +67,16 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  String _formatTime(DateTime? time) {
+    if (time == null) return '';
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
   @override
   Widget build(BuildContext context) {
-    List<ChatUser> filteredUsers = users.where((user) {
-      final matchesSearch =
-          user.name.toLowerCase().contains(searchQuery.toLowerCase());
-      final matchesUnread = showUnreadOnly ? user.isUnread : true;
-      return matchesSearch && matchesUnread;
-    }).toList();
-
-    filteredUsers.sort((a, b) {
-      if (a.isPinned == b.isPinned) return 0;
-      return a.isPinned ? -1 : 1;
-    });
-
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F4),
       appBar: AppBar(
@@ -155,11 +99,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
-              onChanged: (value) {
-                setState(() {
-                  searchQuery = value;
-                });
-              },
+              onChanged: (value) => setState(() => searchQuery = value),
               decoration: InputDecoration(
                 hintText: "Search messages...",
                 prefixIcon: const Icon(Icons.search),
@@ -173,7 +113,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-          // Toggle
+          // Toggle All / Unread
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
@@ -185,20 +125,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 children: [
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          showUnreadOnly = false;
-                        });
-                      },
+                      onTap: () => setState(() => showUnreadOnly = false),
                       child: Container(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
-                          color: showUnreadOnly
-                              ? Colors.transparent
-                              : Colors.white,
-                          borderRadius:
-                              BorderRadius.circular(20),
+                          color: showUnreadOnly ? Colors.transparent : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Center(child: Text("All")),
                       ),
@@ -206,20 +138,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          showUnreadOnly = true;
-                        });
-                      },
+                      onTap: () => setState(() => showUnreadOnly = true),
                       child: Container(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
-                          color: showUnreadOnly
-                              ? Colors.white
-                              : Colors.transparent,
-                          borderRadius:
-                              BorderRadius.circular(20),
+                          color: showUnreadOnly ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Center(child: Text("Unread")),
                       ),
@@ -232,136 +156,168 @@ class _ChatScreenState extends State<ChatScreen> {
 
           const SizedBox(height: 16),
 
-          // 💬 Chat List
+          // 💬 Chat List — now from Firebase
           Expanded(
-            child: ListView.builder(
-              itemCount: filteredUsers.length,
-              itemBuilder: (context, index) {
-                final user = filteredUsers[index];
+            child: StreamBuilder<List<ChatModel>>(
+              stream: _chatService.getUserChats(),
+              builder: (context, snapshot) {
 
-                return GestureDetector(
-                  onLongPress: () => showPinDialog(user),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            MessageScreen(userName: user.name),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFECE6D8),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        )
-                      ],
-                    ),
-                    child: Row(
-                      children: [
+                // Loading state
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                        // 🔥 Profile Picture
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundColor: Colors.grey[300],
-                          backgroundImage: user.profileImage != null
-                              ? NetworkImage(user.profileImage!)
-                              : null,
-                          child: user.profileImage == null
-                              ? Text(
-                                  user.name[0],
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20),
+                // Empty state
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(
+                    child: Text("No chats yet",
+                        style: TextStyle(color: Colors.grey, fontSize: 16)),
+                  );
+                }
+
+                List<ChatModel> chats = snapshot.data!;
+
+                // Apply search filter
+                if (searchQuery.isNotEmpty) {
+                  chats = chats.where((chat) {
+                    final otherId = getOtherUserId(chat.participants);
+                    return otherId.toLowerCase().contains(searchQuery.toLowerCase());
+                  }).toList();
+                }
+
+                // Apply unread filter — NOTE: unread count needs separate logic,
+                // keeping showUnreadOnly as a UI toggle for now
+                // (full unread count will work after message_screen is updated)
+
+                // Sort: pinned first
+                chats.sort((a, b) {
+                  final aPinned = pinnedChats.contains(a.id);
+                  final bPinned = pinnedChats.contains(b.id);
+                  if (aPinned == bPinned) return 0;
+                  return aPinned ? -1 : 1;
+                });
+
+                return ListView.builder(
+                  itemCount: chats.length,
+                  itemBuilder: (context, index) {
+                    final chat = chats[index];
+                    final otherUserId = getOtherUserId(chat.participants);
+                    final isPinned = pinnedChats.contains(chat.id);
+
+                    // Fetch other user's name from Firestore /users collection
+                    return FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(otherUserId)
+                          .get(),
+                      builder: (context, userSnapshot) {
+                        // Use real name if available, fallback to UID initial
+                        final userName = userSnapshot.hasData &&
+                                userSnapshot.data!.exists
+                            ? (userSnapshot.data!['name'] ??
+                                userSnapshot.data!['displayName'] ??
+                                otherUserId)
+                            : otherUserId;
+
+                        final userInitial =
+                            userName.isNotEmpty ? userName[0].toUpperCase() : '?';
+
+                        return GestureDetector(
+                          onLongPress: () => showPinDialog(chat.id),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => MessageScreen(
+                                  chatId: chat.id,
+                                  otherUserId: otherUserId,
+                                  userName: userName,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFECE6D8),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.03),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 3),
                                 )
-                              : null,
-                        ),
-
-                        const SizedBox(width: 12),
-
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                user.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                user.message,
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.end,
-                          children: [
-                            Row(
+                              ],
+                            ),
+                            child: Row(
                               children: [
-                                if (user.isPinned)
-                                  const Padding(
-                                    padding:
-                                        EdgeInsets.only(right: 6),
-                                    child: Icon(
-                                      Icons.push_pin,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
+
+                                // Profile Picture (same as original)
+                                CircleAvatar(
+                                  radius: 28,
+                                  backgroundColor: Colors.grey[300],
+                                  child: Text(
+                                    userInitial,
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 20),
                                   ),
-                                Text(
-                                  user.time,
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey),
+                                ),
+
+                                const SizedBox(width: 12),
+
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        userName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        chat.lastMessage.isEmpty
+                                            ? "No messages yet"
+                                            : chat.lastMessage,
+                                        style: const TextStyle(color: Colors.grey),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Time + pin (same layout as original)
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        if (isPinned)
+                                          const Padding(
+                                            padding: EdgeInsets.only(right: 6),
+                                            child: Icon(Icons.push_pin,
+                                                size: 16, color: Colors.grey),
+                                          ),
+                                        Text(
+                                          _formatTime(chat.lastMessageTime),
+                                          style: const TextStyle(
+                                              fontSize: 12, color: Colors.grey),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 6),
-                            if (user.isUnread)
-                              Container(
-                                padding:
-                                    const EdgeInsets.all(6),
-                                decoration:
-                                    const BoxDecoration(
-                                  color:
-                                      Color(0xFFF4A825),
-                                  shape:
-                                      BoxShape.circle,
-                                ),
-                                child: Text(
-                                  user.unreadCount
-                                      .toString(),
-                                  style:
-                                      const TextStyle(
-                                    color:
-                                        Colors.white,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              )
-                          ],
-                        )
-                      ],
-                    ),
-                  ),
+                          ),
+                        );
+                      },
+                    );
+                  },
                 );
               },
             ),

@@ -199,52 +199,54 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
   // 🔐 LOGIN LOGIC
-  void _loginUser() async {
+void _loginUser() async {
 
-    if (!_formKey.currentState!.validate()) return;
+  if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
 
-    try {
+  try {
 
-      String? userId = await _authService.loginUser(
-        username: _usernameController.text.trim(),
-        password: _passwordController.text.trim(),
+    String? userId = await _authService.loginUser(
+      username: _usernameController.text.trim(),
+      password: _passwordController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    if (userId != null) {
+
+      await _authService.saveSession(userId); // ✅ ADDED THIS LINE
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomeScreen(userId: userId),
+        ),
       );
 
-      if (!mounted) return;
-
-      setState(() => _isLoading = false);
-
-      if (userId != null) {
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => HomeScreen(userId: userId),
-          ),
-        );
-
-      } else {
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Invalid username or password"),
-          ),
-        );
-      }
-
-    } catch (e) {
-
-      setState(() => _isLoading = false);
+    } else {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Something went wrong"),
+          content: Text("Invalid username or password"),
         ),
       );
     }
+
+  } catch (e) {
+
+    setState(() => _isLoading = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Something went wrong"),
+      ),
+    );
   }
+}
+  
 }

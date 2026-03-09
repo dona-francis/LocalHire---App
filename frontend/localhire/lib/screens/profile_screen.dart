@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
+import '../services/auth_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userId;
@@ -13,6 +14,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final AuthService _authService = AuthService();
 
   bool isHiring = false;
 
@@ -513,7 +515,7 @@ print("Total reviews fetched: ${query.docs.length}");
         if (text == "LOGOUT") {
 
           await FirebaseAuth.instance.signOut();
-
+          await _authService.logout();
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(
