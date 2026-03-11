@@ -9,6 +9,7 @@ import '../services/chat_service.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:path/path.dart' as p;
 import '../services/auth_service.dart';
+import 'location_picker_screen.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
   final String username;
@@ -26,6 +27,9 @@ class CompleteProfileScreen extends StatefulWidget {
   State<CompleteProfileScreen> createState() =>
       _CompleteProfileScreenState();
 }
+
+double? _selectedLat;
+double? _selectedLng;
 
 class _CompleteProfileScreenState
     extends State<CompleteProfileScreen> {
@@ -119,6 +123,7 @@ class _CompleteProfileScreenState
         "age": int.parse(_ageController.text.trim()),
         "gender": _selectedGender,
         "location": _locationController.text.trim(),
+        "locationGeoPoint": GeoPoint(_selectedLat!, _selectedLng!),
         "skills": skills,
         "profileImage": profileUrl,
         "idProof": encryptedId,
@@ -284,15 +289,56 @@ class _CompleteProfileScreenState
               const SizedBox(height: 20),
 
               // ---------- LOCATION ----------
-              _label("Location"),
-              _textField(
-                controller: _locationController,
-                hint: "Enter your city",
-                validator: (value) =>
-                    value == null || value.isEmpty ? "Required" : null,
-              ),
-
-              const SizedBox(height: 30),
+              // ---------- LOCATION ----------
+_label("Location"),
+GestureDetector(
+  onTap: () async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const LocationPickerScreen(),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _locationController.text = result["address"];
+        _selectedLat = result["lat"];
+        _selectedLng = result["lng"];
+      });
+    }
+  },
+  child: Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    decoration: BoxDecoration(
+      border: Border.all(
+        color: _locationController.text.isEmpty
+            ? const Color(0xFFE0E0E0)
+            : const Color(0xFFF5B544),
+      ),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.location_on_outlined, color: Color(0xFFF5B544)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            _locationController.text.isEmpty
+                ? "Tap to pick your location"
+                : _locationController.text,
+            style: TextStyle(
+              color: _locationController.text.isEmpty
+                  ? Colors.grey
+                  : Colors.black,
+            ),
+          ),
+        ),
+        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+      ],
+    ),
+  ),
+),
 
               // ---------- ID VERIFICATION (Elizabeth's improved UI) ----------
               const Text(
@@ -466,6 +512,12 @@ class _CompleteProfileScreenState
                               );
                               return;
                             }
+                            if (_selectedLat == null || _selectedLng == null) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text("Please pick your location")),
+  );
+  return;
+}
                             _saveProfile();
                           }
                         },

@@ -6,6 +6,7 @@ import 'add_job/add_job_screen.dart';
 import 'chat_screen.dart';
 import 'notification_screen.dart';
 import 'profile_screen.dart';
+import 'location_picker_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userId;
@@ -21,6 +22,29 @@ class _HomeScreenState extends State<HomeScreen> {
   String selectedType = "All";
   String selectedSort = "None";
   String searchText = "";
+  String userLocation = "Loading...";
+
+@override
+void initState() {
+  super.initState();
+  _loadUserLocation();
+}
+
+Future<void> _loadUserLocation() async {
+  try {
+    final doc = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(widget.userId)
+        .get();
+    if (doc.exists) {
+      setState(() {
+        userLocation = doc.data()?["location"] ?? "Unknown";
+      });
+    }
+  } catch (e) {
+    setState(() => userLocation = "Unknown");
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -116,33 +140,61 @@ final matchesType =
     );
   }
 
-  Widget _header() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Icon(Icons.location_on, color: Color(0xFFFFB544)),
-          SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              "Mumbai, Maharashtra",
-              style:
-                  TextStyle(fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-            ),
+Widget _header() {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: Row(
+      children: [
+        GestureDetector(
+          onTap: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const LocationPickerScreen(),
+              ),
+            );
+            if (result != null) {
+              // Save new location to Firestore
+              await FirebaseFirestore.instance
+                  .collection("users")
+                  .doc(widget.userId)
+                  .update({
+                "location": result["address"],
+                "locationGeoPoint": GeoPoint(
+                  result["lat"],
+                  result["lng"],
+                ),
+              });
+              // Update UI
+              setState(() {
+                userLocation = result["address"];
+              });
+            }
+          },
+          child: Row(
+            children: [
+              const Icon(Icons.location_on, color: Color(0xFFFFB544)),
+              const SizedBox(width: 5),
+              Text(
+                userLocation,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const Icon(Icons.arrow_drop_down, color: Colors.grey),
+            ],
           ),
-          Text(
-            "LocalHire",
-            style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold),
-          ),
-          Spacer(),
-          Icon(Icons.notifications_none, size: 28),
-        ],
-      ),
-    );
-  }
+        ),
+        const Spacer(),
+        const Text(
+          "LocalHire",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const Spacer(),
+        const Icon(Icons.notifications_none, size: 28),
+      ],
+    ),
+  );
+}
 
   Widget _searchBar() {
     return Padding(
