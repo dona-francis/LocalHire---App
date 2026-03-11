@@ -2,16 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/signup_screen.dart';
+import 'services/chat_service.dart';
 import 'screens/home_screen.dart';
 import 'services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
   runApp(const LocalHireApp());
 }
 
@@ -29,7 +28,7 @@ class LocalHireApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const AuthGate(), // ✅ CHECK SESSION FIRST
+      home: const AuthGate(),
     );
   }
 }
@@ -56,7 +55,12 @@ class _AuthGateState extends State<AuthGate> {
     if (!mounted) return;
 
     if (userId != null) {
-      // ✅ Session found — go straight to Home
+      // ✅ Set ChatService user
+      ChatService().setCurrentUser(userId);
+
+      // ✅ Firebase Auth phone session auto-persists — no restore needed
+      // If currentUser is null it means they logged out — send to signup
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -64,7 +68,6 @@ class _AuthGateState extends State<AuthGate> {
         ),
       );
     } else {
-      // ❌ No session — go to Signup
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -76,7 +79,6 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    // Shows spinner while checking session (less than 1 second)
     return const Scaffold(
       body: Center(child: CircularProgressIndicator()),
     );

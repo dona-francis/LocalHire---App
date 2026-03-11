@@ -10,21 +10,31 @@ class ChatService {
   ChatService._internal();
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Convenience getter: who is logged in right now?
-  String get currentUserId => _auth.currentUser!.uid;
+  // ── Who is logged in (manual fallback) ──
+  String? _currentUserId;
 
-  // ─────────────────────────────────────────────
-  // 1. Get or create a chat between two users
-  //    Call this when starting a conversation
-  // ─────────────────────────────────────────────
+  void setCurrentUser(String userId) {
+    _currentUserId = userId;
+  }
+
+  String get currentUserId {
+    // ✅ Try Firebase Auth first (works for OTP signup session)
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser != null) return firebaseUser.uid;
+
+    // ✅ Fallback to manually set userId (works for username/password login)
+    if (_currentUserId != null) return _currentUserId!;
+
+    throw Exception("ChatService: no user logged in");
+  }
+
+  // ── 1. Get or create a chat between two users ──
   Future<String> getOrCreateChat({
     required String otherUserId,
-    String? createdFrom,  // pass "job_application" or "saved_profile" later
-    String? sourceId,     // pass jobId or savedProfileId later
+    String? createdFrom,
+    String? sourceId,
   }) async {
-    // Check if a chat already exists between these two users
     final existing = await _db
         .collection('chats')
         .where('participants', arrayContains: currentUserId)
@@ -33,25 +43,22 @@ class ChatService {
     for (final doc in existing.docs) {
       final participants = List<String>.from(doc['participants']);
       if (participants.contains(otherUserId)) {
-        return doc.id; // Chat already exists, return its ID
+        return doc.id;
       }
     }
 
-    // No existing chat — create a new one
     final newChat = await _db.collection('chats').add({
       'participants': [currentUserId, otherUserId],
       'lastMessage': '',
       'lastMessageTime': FieldValue.serverTimestamp(),
-      'createdFrom': createdFrom,   // null for now, filled later
-      'sourceId': sourceId,         // null for now, filled later
+      'createdFrom': createdFrom,
+      'sourceId': sourceId,
     });
 
     return newChat.id;
   }
 
-  // ─────────────────────────────────────────────
-  // 2. Send a message
-  // ─────────────────────────────────────────────
+  // ── 2. Send a message ──
   Future<void> sendMessage({
     required String chatId,
     required String text,
@@ -67,24 +74,19 @@ class ChatService {
       deleted: false,
     );
 
-    // Add message to subcollection
     await _db
         .collection('chats')
         .doc(chatId)
         .collection('messages')
         .add(message.toMap());
 
-    // Update the chat's last message preview
     await _db.collection('chats').doc(chatId).update({
       'lastMessage': type == 'text' ? text : '📎 Attachment',
       'lastMessageTime': FieldValue.serverTimestamp(),
     });
   }
 
-  // ─────────────────────────────────────────────
-  // 3. Real-time stream of messages in a chat
-  //    UI listens to this — auto-updates on new messages
-  // ─────────────────────────────────────────────
+  // ── 3. Real-time stream of messages ──
   Stream<List<MessageModel>> getMessages(String chatId) {
     return _db
         .collection('chats')
@@ -96,10 +98,7 @@ class ChatService {
             snapshot.docs.map((doc) => MessageModel.fromDoc(doc)).toList());
   }
 
-  // ─────────────────────────────────────────────
-  // 4. Real-time stream of all chats for current user
-  //    ChatScreen listens to this
-  // ─────────────────────────────────────────────
+  // ── 4. Real-time stream of all chats for current user ──
   Stream<List<ChatModel>> getUserChats() {
     return _db
         .collection('chats')
@@ -110,9 +109,7 @@ class ChatService {
             snapshot.docs.map((doc) => ChatModel.fromDoc(doc)).toList());
   }
 
-  // ─────────────────────────────────────────────
-  // 5. Mark messages as read
-  // ─────────────────────────────────────────────
+  // ── 5. Mark messages as read ──
   Future<void> markMessagesAsRead(String chatId) async {
     final unread = await _db
         .collection('chats')
@@ -122,16 +119,14 @@ class ChatService {
         .where('senderId', isNotEqualTo: currentUserId)
         .get();
 
-    final batch = _db.batch(); // batch = do multiple writes at once efficiently
+    final batch = _db.batch();
     for (final doc in unread.docs) {
       batch.update(doc.reference, {'isRead': true});
     }
     await batch.commit();
   }
 
-  // ─────────────────────────────────────────────
-  // 6. Soft-delete a message (just marks deleted: true)
-  // ─────────────────────────────────────────────
+  // ── 6. Soft-delete a message ──
   Future<void> deleteMessage(String chatId, String messageId) async {
     await _db
         .collection('chats')
