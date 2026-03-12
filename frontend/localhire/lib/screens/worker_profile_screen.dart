@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:share_plus/share_plus.dart';
 
 class WorkerProfileScreen extends StatelessWidget {
   final String userId;
@@ -181,9 +182,14 @@ class WorkerProfileScreen extends StatelessWidget {
                     const SizedBox(width: 15),
 
                     GestureDetector(
-                      onTap: () {
-                        print("Share profile");
-                      },
+     onTap: () {
+  final String profileLink =
+      "localhire://profile/$userId";
+
+  Share.share(
+    "Check out this worker on LocalHire 👇\n\n$profileLink",
+  );
+},
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 25, vertical: 12),

@@ -3,7 +3,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/signup_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/worker_profile_screen.dart';
 import 'services/auth_service.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,12 +45,18 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   final AuthService _authService = AuthService();
+  
+  
 
-  @override
-  void initState() {
-    super.initState();
-    _checkSession();
-  }
+@override
+void initState() {
+  super.initState();
+
+  _checkSession();
+}
+
+  
+
 
   void _checkSession() async {
     final userId = await _authService.getSession();
