@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'home_screen.dart';
@@ -46,6 +47,18 @@ class _CompleteProfileScreenState
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
 
+  // ── Emergency Contacts ────────────────────────────────────────────────────
+  final List<Map<String, TextEditingController>> _emergencyContacts = [
+    {
+      "name": TextEditingController(),
+      "phone": TextEditingController(),
+    },
+    {
+      "name": TextEditingController(),
+      "phone": TextEditingController(),
+    },
+  ];
+
   final _key = encrypt.Key.fromUtf8('12345678901234567890123456789012');
   final _iv = encrypt.IV.fromLength(16);
 
@@ -53,6 +66,41 @@ class _CompleteProfileScreenState
     final encrypter = encrypt.Encrypter(encrypt.AES(_key));
     final encrypted = encrypter.encrypt(data, iv: _iv);
     return encrypted.base64;
+  }
+
+  @override
+  void dispose() {
+    for (final contact in _emergencyContacts) {
+      contact["name"]!.dispose();
+      contact["phone"]!.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addEmergencyContact() {
+    setState(() {
+      _emergencyContacts.add({
+        "name": TextEditingController(),
+        "phone": TextEditingController(),
+      });
+    });
+  }
+
+  void _removeEmergencyContact(int index) {
+    if (_emergencyContacts.length <= 2) return; // min 2 required
+    _emergencyContacts[index]["name"]!.dispose();
+    _emergencyContacts[index]["phone"]!.dispose();
+    setState(() => _emergencyContacts.removeAt(index));
+  }
+
+  bool _validateEmergencyContacts() {
+    for (int i = 0; i < _emergencyContacts.length; i++) {
+      final name = _emergencyContacts[i]["name"]!.text.trim();
+      final phone = _emergencyContacts[i]["phone"]!.text.trim();
+      if (name.isEmpty || phone.isEmpty) return false;
+      if (phone.length < 10) return false;
+    }
+    return true;
   }
 
   Future<void> _pickProfileImage() async {
@@ -76,7 +124,6 @@ class _CompleteProfileScreenState
       final authService = AuthService();
       final hashedPassword = authService.hashPassword(widget.password);
 
-      // ✅ YOUR FIX: Use Firebase Auth UID as Firestore document ID
       final firebaseUid = FirebaseAuth.instance.currentUser?.uid;
       if (firebaseUid == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -87,7 +134,6 @@ class _CompleteProfileScreenState
         return;
       }
 
-      // ✅ firebaseUid as doc ID (not .doc() which generates random ID)
       final userDoc = FirebaseFirestore.instance
           .collection("users")
           .doc(firebaseUid);
@@ -114,6 +160,14 @@ class _CompleteProfileScreenState
 
       final encryptedId = encryptData(idUrl);
 
+      // Build emergency contacts list
+      final emergencyContactsList = _emergencyContacts
+          .map((c) => {
+                "name": c["name"]!.text.trim(),
+                "phone": c["phone"]!.text.trim(),
+              })
+          .toList();
+
       // Save to Firestore
       await userDoc.set({
         "username": widget.username,
@@ -127,6 +181,7 @@ class _CompleteProfileScreenState
         "skills": skills,
         "profileImage": profileUrl,
         "idProof": encryptedId,
+        "emergencyContacts": emergencyContactsList,
         "verificationStatus": "pending",
         "createdAt": Timestamp.now(),
       });
@@ -149,7 +204,6 @@ class _CompleteProfileScreenState
     setState(() => _isLoading = false);
   }
 
-  // ✅ ELIZABETH: add skill
   void _addSkill() {
     final skill = _skillController.text.trim();
     if (skill.isNotEmpty && !skills.contains(skill)) {
@@ -160,7 +214,6 @@ class _CompleteProfileScreenState
     }
   }
 
-  // ✅ ELIZABETH: remove skill
   void _removeSkill(String skill) {
     setState(() => skills.remove(skill));
   }
@@ -289,61 +342,66 @@ class _CompleteProfileScreenState
               const SizedBox(height: 20),
 
               // ---------- LOCATION ----------
-              // ---------- LOCATION ----------
-_label("Location"),
-GestureDetector(
-  onTap: () async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const LocationPickerScreen(),
-      ),
-    );
-    if (result != null) {
-      setState(() {
-        _locationController.text = result["address"];
-        _selectedLat = result["lat"];
-        _selectedLng = result["lng"];
-      });
-    }
-  },
-  child: Container(
-    width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    decoration: BoxDecoration(
-      border: Border.all(
-        color: _locationController.text.isEmpty
-            ? const Color(0xFFE0E0E0)
-            : const Color(0xFFF5B544),
-      ),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      children: [
-        const Icon(Icons.location_on_outlined, color: Color(0xFFF5B544)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            _locationController.text.isEmpty
-                ? "Tap to pick your location"
-                : _locationController.text,
-            style: TextStyle(
-              color: _locationController.text.isEmpty
-                  ? Colors.grey
-                  : Colors.black,
-            ),
-          ),
-        ),
-        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-      ],
-    ),
-  ),
-),
+              _label("Location"),
+              GestureDetector(
+                onTap: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LocationPickerScreen(),
+                    ),
+                  );
+                  if (result != null) {
+                    setState(() {
+                      _locationController.text = result["address"];
+                      _selectedLat = result["lat"];
+                      _selectedLng = result["lng"];
+                    });
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: _locationController.text.isEmpty
+                          ? const Color(0xFFE0E0E0)
+                          : const Color(0xFFF5B544),
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined,
+                          color: Color(0xFFF5B544)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _locationController.text.isEmpty
+                              ? "Tap to pick your location"
+                              : _locationController.text,
+                          style: TextStyle(
+                            color: _locationController.text.isEmpty
+                                ? Colors.grey
+                                : Colors.black,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios,
+                          size: 14, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              ),
 
-              // ---------- ID VERIFICATION (Elizabeth's improved UI) ----------
+              const SizedBox(height: 25),
+
+              // ---------- ID VERIFICATION ----------
               const Text(
                 "ID VERIFICATION",
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600),
               ),
 
               const SizedBox(height: 10),
@@ -423,7 +481,8 @@ GestureDetector(
                                   size: 16, color: Color(0xFFF5B544)),
                               label: const Text(
                                 "Upload ID",
-                                style: TextStyle(color: Color(0xFFF5B544)),
+                                style:
+                                    TextStyle(color: Color(0xFFF5B544)),
                               ),
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(
@@ -440,10 +499,11 @@ GestureDetector(
 
               const SizedBox(height: 30),
 
-              // ---------- ADD SKILLS (Elizabeth's improved UI) ----------
+              // ---------- ADD SKILLS ----------
               const Text(
                 "ADD SKILLS",
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600),
               ),
 
               const SizedBox(height: 10),
@@ -452,9 +512,8 @@ GestureDetector(
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: skills
-                      .map((skill) => _skillChip(skill))
-                      .toList(),
+                  children:
+                      skills.map((skill) => _skillChip(skill)).toList(),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -465,8 +524,8 @@ GestureDetector(
                     child: TextFormField(
                       controller: _skillController,
                       textCapitalization: TextCapitalization.words,
-                      decoration:
-                          _inputDecoration("Type a skill and press enter"),
+                      decoration: _inputDecoration(
+                          "Type a skill and press enter"),
                       onFieldSubmitted: (_) => _addSkill(),
                     ),
                   ),
@@ -480,7 +539,8 @@ GestureDetector(
                         color: Color(0xFFF5B544),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.add, color: Colors.white),
+                      child:
+                          const Icon(Icons.add, color: Colors.white),
                     ),
                   ),
                 ],
@@ -495,6 +555,61 @@ GestureDetector(
 
               const SizedBox(height: 30),
 
+              // ---------- EMERGENCY CONTACTS ----------
+              Row(
+                children: [
+                  const Text(
+                    "EMERGENCY CONTACTS",
+                    style: TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFE0E0),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      "Min. 2 required",
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 6),
+
+              const Text(
+                "These contacts will be alerted if you press the SOS button.",
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+
+              const SizedBox(height: 14),
+
+              // Contact cards
+              ...List.generate(_emergencyContacts.length, (index) {
+                return _emergencyContactCard(index);
+              }),
+
+              // Add more button (only if less than 5)
+              if (_emergencyContacts.length < 5)
+                TextButton.icon(
+                  onPressed: _addEmergencyContact,
+                  icon: const Icon(Icons.add_circle_outline,
+                      color: Color(0xFFF5B544)),
+                  label: const Text(
+                    "Add another contact",
+                    style: TextStyle(color: Color(0xFFF5B544)),
+                  ),
+                ),
+
+              const SizedBox(height: 30),
+
               // ---------- SAVE BUTTON ----------
               SizedBox(
                 width: double.infinity,
@@ -504,20 +619,37 @@ GestureDetector(
                       ? null
                       : () {
                           if (_formKey.currentState!.validate()) {
-                            if (_profileImage == null || _idImage == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                            if (_profileImage == null ||
+                                _idImage == null) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(
                                 const SnackBar(
-                                    content:
-                                        Text("Photo and ID required")),
+                                    content: Text(
+                                        "Photo and ID required")),
                               );
                               return;
                             }
-                            if (_selectedLat == null || _selectedLng == null) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text("Please pick your location")),
-  );
-  return;
-}
+                            if (_selectedLat == null ||
+                                _selectedLng == null) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        "Please pick your location")),
+                              );
+                              return;
+                            }
+                            if (!_validateEmergencyContacts()) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "Please fill all emergency contacts with valid 10-digit phone numbers",
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
                             _saveProfile();
                           }
                         },
@@ -527,7 +659,8 @@ GestureDetector(
                         borderRadius: BorderRadius.circular(12)),
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.black)
+                      ? const CircularProgressIndicator(
+                          color: Colors.black)
                       : const Text("Save & Continue",
                           style: TextStyle(
                               fontSize: 16,
@@ -544,7 +677,105 @@ GestureDetector(
     );
   }
 
-  // ✅ ELIZABETH: skill chip with remove button
+  // ── Emergency contact card ─────────────────────────────────────────────────
+
+  Widget _emergencyContactCard(int index) {
+    final isRemovable = _emergencyContacts.length > 2;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8EE),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFFE0A0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF5B544),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    "${index + 1}",
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                index < 2
+                    ? "Contact ${index + 1} (Required)"
+                    : "Contact ${index + 1}",
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const Spacer(),
+              if (isRemovable)
+                GestureDetector(
+                  onTap: () => _removeEmergencyContact(index),
+                  child: const Icon(Icons.remove_circle_outline,
+                      color: Colors.red, size: 20),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Name field
+          TextFormField(
+            controller: _emergencyContacts[index]["name"],
+            textCapitalization: TextCapitalization.words,
+            decoration: _inputDecoration("Full name"),
+            validator: (value) {
+              if (index < 2 && (value == null || value.trim().isEmpty)) {
+                return "Name is required";
+              }
+              return null;
+            },
+          ),
+
+          const SizedBox(height: 10),
+
+          // Phone field
+          TextFormField(
+            controller: _emergencyContacts[index]["phone"],
+            keyboardType: TextInputType.phone,
+            maxLength: 10,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: _inputDecoration("Phone number").copyWith(
+              counterText: "",
+              prefixText: "+91 ",
+            ),
+            validator: (value) {
+              if (index < 2) {
+                if (value == null || value.trim().isEmpty) {
+                  return "Phone is required";
+                }
+                if (value.trim().length < 10) {
+                  return "Enter a valid 10-digit number";
+                }
+              }
+              return null;
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
   Widget _skillChip(String skill) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -605,6 +836,14 @@ GestureDetector(
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Colors.orange),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.red),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.red),
       ),
     );
   }

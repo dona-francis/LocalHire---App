@@ -22,14 +22,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool isHiring = false;
   bool _sosLoading = false;
 
-  // ── Emergency contacts ──────────────────────────────────────────────────────
-  // Replace these with your real emergency numbers
-  static const List<String> _emergencyNumbers = [
-    '+911234567890',
-    '+919876543210',
-  ];
-  // ────────────────────────────────────────────────────────────────────────────
-
   final Color primaryGold = const Color(0xFFFFB544);
   final Color lightCream = const Color(0xFFFFE7BF);
   final Color localRed = const Color(0xFFE53935);
@@ -244,10 +236,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
           "${position.longitude.toStringAsFixed(5)}\n\n"
           "Please respond immediately!";
 
-      // 4. Send SMS to each emergency number
-      for (final number in _emergencyNumbers) {
-        await _sendSMS(number, smsBody);
-      }
+      // 4. Fetch emergency contacts from userData and send SMS
+final emergencyContacts = List<Map<String, dynamic>>.from(
+  userData?["emergencyContacts"] ?? [],
+);
+
+if (emergencyContacts.isEmpty) {
+  _showSnack("No emergency contacts found. Please add them in your profile.", isError: true);
+  return;
+}
+
+for (final contact in emergencyContacts) {
+  final phone = contact["phone"]?.toString().trim() ?? "";
+  if (phone.isNotEmpty) {
+    await _sendSMS("+91$phone", smsBody);
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+}
 
       // 5. Log SOS alert in Firestore for admin dashboard
       await _logSOSToFirestore(
@@ -315,7 +320,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       queryParameters: {'body': body},
     );
     if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
