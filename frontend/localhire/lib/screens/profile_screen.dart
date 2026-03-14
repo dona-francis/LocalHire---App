@@ -18,7 +18,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
-
   bool isHiring = false;
   bool _sosLoading = false;
 
@@ -246,14 +245,12 @@ if (emergencyContacts.isEmpty) {
   return;
 }
 
-for (final contact in emergencyContacts) {
-  final phone = contact["phone"]?.toString().trim() ?? "";
-  if (phone.isNotEmpty) {
-    await _sendSMS("+91$phone", smsBody);
-    await Future.delayed(const Duration(milliseconds: 500));
-  }
-}
+final numbers = emergencyContacts
+    .map((c) => "+91${c["phone"]?.toString().trim() ?? ""}")
+    .where((p) => p.length > 3)
+    .join(";");
 
+await _sendSMS(numbers, smsBody);
       // 5. Log SOS alert in Firestore for admin dashboard
       await _logSOSToFirestore(
         employeeName: employeeName,
@@ -313,16 +310,16 @@ for (final contact in emergencyContacts) {
     return "Not currently on a job";
   }
 
-  Future<void> _sendSMS(String phoneNumber, String body) async {
-    final uri = Uri(
-      scheme: 'sms',
-      path: phoneNumber,
-      queryParameters: {'body': body},
-    );
-    if (await canLaunchUrl(uri)) {
-       await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  Future<void> _sendSMS(String phoneNumbers, String body) async {
+  final uri = Uri(
+    scheme: 'sms',
+    path: phoneNumbers,
+    queryParameters: {'body': body},
+  );
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
+}
 
   Future<void> _logSOSToFirestore({
     required String employeeName,
