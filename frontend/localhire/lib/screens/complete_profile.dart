@@ -1,15 +1,17 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'home_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../services/chat_service.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:path/path.dart' as p;
 import '../services/auth_service.dart';
+import 'location_picker_screen.dart';
 
 class CompleteProfileScreen extends StatefulWidget {
-
   final String username;
   final String password;
   final String phone;
@@ -26,33 +28,25 @@ class CompleteProfileScreen extends StatefulWidget {
       _CompleteProfileScreenState();
 }
 
+double? _selectedLat;
+double? _selectedLng;
+
 class _CompleteProfileScreenState
     extends State<CompleteProfileScreen> {
-
   final _formKey = GlobalKey<FormState>();
-
-  final TextEditingController _nameController =
-      TextEditingController();
-  final TextEditingController _ageController =
-      TextEditingController();
-  final TextEditingController _locationController =
-      TextEditingController();
-  final TextEditingController _skillController =
-      TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _ageController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _skillController = TextEditingController();
 
   String? _selectedGender;
   List<String> skills = [];
-
   File? _profileImage;
   File? _idImage;
-
   bool _isLoading = false;
-
   final ImagePicker _picker = ImagePicker();
 
-  // 🔐 Encryption Key
-  final _key =
-      encrypt.Key.fromUtf8('12345678901234567890123456789012');
+  final _key = encrypt.Key.fromUtf8('12345678901234567890123456789012');
   final _iv = encrypt.IV.fromLength(16);
 
   String encryptData(String data) {
@@ -62,41 +56,41 @@ class _CompleteProfileScreenState
   }
 
   Future<void> _pickProfileImage() async {
-    final picked =
-        await _picker.pickImage(source: ImageSource.gallery);
-
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
-      setState(() {
-        _profileImage = File(picked.path);
-      });
+      setState(() => _profileImage = File(picked.path));
     }
   }
 
   Future<void> _pickIdImage() async {
-    final picked =
-        await _picker.pickImage(source: ImageSource.gallery);
-
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
-      setState(() {
-        _idImage = File(picked.path);
-      });
+      setState(() => _idImage = File(picked.path));
     }
   }
 
   Future<void> _saveProfile() async {
-
     setState(() => _isLoading = true);
 
     try {
-
       final authService = AuthService();
-      final hashedPassword =
-          authService.hashPassword(widget.password);
+      final hashedPassword = authService.hashPassword(widget.password);
 
-      // 🔥 Create Firestore document with auto ID
+      // ✅ YOUR FIX: Use Firebase Auth UID as Firestore document ID
+      final firebaseUid = FirebaseAuth.instance.currentUser?.uid;
+      if (firebaseUid == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text("Session expired. Please verify OTP again.")),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // ✅ firebaseUid as doc ID (not .doc() which generates random ID)
       final userDoc = FirebaseFirestore.instance
           .collection("users")
-          .doc();
+          .doc(firebaseUid);
 
       final userId = userDoc.id;
 
@@ -106,7 +100,6 @@ class _CompleteProfileScreenState
           .child("profile_images")
           .child(userId)
           .child(p.basename(_profileImage!.path));
-
       await profileRef.putFile(_profileImage!);
       final profileUrl = await profileRef.getDownloadURL();
 
@@ -116,11 +109,9 @@ class _CompleteProfileScreenState
           .child("id_proofs")
           .child(userId)
           .child(p.basename(_idImage!.path));
-
       await idRef.putFile(_idImage!);
       final idUrl = await idRef.getDownloadURL();
 
-      // Encrypt ID URL
       final encryptedId = encryptData(idUrl);
 
       // Save to Firestore
@@ -132,13 +123,16 @@ class _CompleteProfileScreenState
         "age": int.parse(_ageController.text.trim()),
         "gender": _selectedGender,
         "location": _locationController.text.trim(),
+        "locationGeoPoint": GeoPoint(_selectedLat!, _selectedLng!),
         "skills": skills,
         "profileImage": profileUrl,
         "idProof": encryptedId,
         "verificationStatus": "pending",
         "createdAt": Timestamp.now(),
       });
+
       await authService.saveSession(userId);
+      ChatService().setCurrentUser(userId);
 
       Navigator.pushReplacement(
         context,
@@ -146,9 +140,7 @@ class _CompleteProfileScreenState
           builder: (context) => HomeScreen(userId: userId),
         ),
       );
-
     } catch (e) {
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );
@@ -157,15 +149,20 @@ class _CompleteProfileScreenState
     setState(() => _isLoading = false);
   }
 
+  // ✅ ELIZABETH: add skill
   void _addSkill() {
-    String skill = _skillController.text.trim();
-
+    final skill = _skillController.text.trim();
     if (skill.isNotEmpty && !skills.contains(skill)) {
       setState(() {
         skills.add(skill);
         _skillController.clear();
       });
     }
+  }
+
+  // ✅ ELIZABETH: remove skill
+  void _removeSkill(String skill) {
+    setState(() => skills.remove(skill));
   }
 
   @override
@@ -175,8 +172,7 @@ class _CompleteProfileScreenState
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
-        leading:
-            const Icon(Icons.arrow_back, color: Colors.black),
+        leading: const Icon(Icons.arrow_back, color: Colors.black),
         centerTitle: true,
         title: const Text(
           "Complete your profile",
@@ -188,10 +184,8 @@ class _CompleteProfileScreenState
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
               const SizedBox(height: 20),
 
               // ---------- PROFILE PHOTO ----------
@@ -204,20 +198,13 @@ class _CompleteProfileScreenState
                         children: [
                           CircleAvatar(
                             radius: 50,
-                            backgroundColor:
-                                const Color(0xFFFFF3DC),
-                            backgroundImage:
-                                _profileImage != null
-                                    ? FileImage(
-                                        _profileImage!)
-                                    : null,
+                            backgroundColor: const Color(0xFFFFF3DC),
+                            backgroundImage: _profileImage != null
+                                ? FileImage(_profileImage!)
+                                : null,
                             child: _profileImage == null
-                                ? const Icon(
-                                    Icons.camera_alt_outlined,
-                                    size: 40,
-                                    color: Color(
-                                        0xFFF5B544),
-                                  )
+                                ? const Icon(Icons.camera_alt_outlined,
+                                    size: 40, color: Color(0xFFF5B544))
                                 : null,
                           ),
                           Positioned(
@@ -225,60 +212,48 @@ class _CompleteProfileScreenState
                             right: 0,
                             child: CircleAvatar(
                               radius: 16,
-                              backgroundColor:
-                                  const Color(
-                                      0xFFF5B544),
-                              child: const Icon(
-                                Icons.edit,
-                                size: 16,
-                                color: Colors.white,
-                              ),
+                              backgroundColor: const Color(0xFFF5B544),
+                              child: const Icon(Icons.edit,
+                                  size: 16, color: Colors.white),
                             ),
-                          )
+                          ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      "Upload Photo",
-                      style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey),
-                    ),
+                    const Text("Upload Photo",
+                        style: TextStyle(fontSize: 14, color: Colors.grey)),
                   ],
                 ),
               ),
 
               const SizedBox(height: 30),
 
+              // ---------- FULL NAME ----------
               _label("Full Name"),
               _textField(
                 controller: _nameController,
                 hint: "Enter your full name",
                 validator: (value) =>
-                    value == null || value.isEmpty
-                        ? "Required"
-                        : null,
+                    value == null || value.isEmpty ? "Required" : null,
               ),
 
               const SizedBox(height: 20),
 
+              // ---------- AGE & GENDER ----------
               Row(
                 children: [
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _label("Age"),
                         _textField(
                           controller: _ageController,
                           hint: "Ex: 25",
-                          keyboardType:
-                              TextInputType.number,
+                          keyboardType: TextInputType.number,
                           validator: (value) =>
-                              value == null ||
-                                      value.isEmpty
+                              value == null || value.isEmpty
                                   ? "Required"
                                   : null,
                         ),
@@ -288,32 +263,22 @@ class _CompleteProfileScreenState
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _label("Gender"),
                         DropdownButtonFormField<String>(
                           initialValue: _selectedGender,
-                          decoration:
-                              _inputDecoration(
-                                  "Select"),
+                          decoration: _inputDecoration("Select"),
                           items: ["Male", "Female", "Other"]
-                              .map(
-                                (g) => DropdownMenuItem(
-                                  value: g,
-                                  child: Text(g),
-                                ),
-                              )
+                              .map((g) => DropdownMenuItem(
+                                    value: g,
+                                    child: Text(g),
+                                  ))
                               .toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedGender = value;
-                            });
-                          },
+                          onChanged: (value) =>
+                              setState(() => _selectedGender = value),
                           validator: (value) =>
-                              value == null
-                                  ? "Required"
-                                  : null,
+                              value == null ? "Required" : null,
                         ),
                       ],
                     ),
@@ -323,24 +288,62 @@ class _CompleteProfileScreenState
 
               const SizedBox(height: 20),
 
-              _label("Location"),
-              _textField(
-                controller: _locationController,
-                hint: "Enter your city",
-                validator: (value) =>
-                    value == null || value.isEmpty
-                        ? "Required"
-                        : null,
-              ),
+              // ---------- LOCATION ----------
+              // ---------- LOCATION ----------
+_label("Location"),
+GestureDetector(
+  onTap: () async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const LocationPickerScreen(),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _locationController.text = result["address"];
+        _selectedLat = result["lat"];
+        _selectedLng = result["lng"];
+      });
+    }
+  },
+  child: Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    decoration: BoxDecoration(
+      border: Border.all(
+        color: _locationController.text.isEmpty
+            ? const Color(0xFFE0E0E0)
+            : const Color(0xFFF5B544),
+      ),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.location_on_outlined, color: Color(0xFFF5B544)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            _locationController.text.isEmpty
+                ? "Tap to pick your location"
+                : _locationController.text,
+            style: TextStyle(
+              color: _locationController.text.isEmpty
+                  ? Colors.grey
+                  : Colors.black,
+            ),
+          ),
+        ),
+        const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+      ],
+    ),
+  ),
+),
 
-              const SizedBox(height: 30),
-
-              // ---------- ID UPLOAD ----------
+              // ---------- ID VERIFICATION (Elizabeth's improved UI) ----------
               const Text(
                 "ID VERIFICATION",
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
 
               const SizedBox(height: 10),
@@ -352,77 +355,147 @@ class _CompleteProfileScreenState
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     border: Border.all(
-                      color: const Color(0xFFE0E0E0),
+                      color: _idImage != null
+                          ? const Color(0xFFF5B544)
+                          : const Color(0xFFE0E0E0),
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Column(
-                          mainAxisSize:
-                              MainAxisSize.min,
+                  child: _idImage != null
+                      ? Stack(
                           children: [
-                            _idImage != null
-                                ? Image.file(
-                                    _idImage!,
-                                    height: 120,
-                                    fit: BoxFit.cover,
-                                  )
-                                : const Icon(
-                                    Icons.badge_outlined,
-                                    size: 40,
-                                    color: Colors.grey,
+                            Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.file(
+                                      _idImage!,
+                                      height: 120,
+                                      fit: BoxFit.cover,
+                                    ),
                                   ),
-                            const SizedBox(height: 10),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    "Tap to change",
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: () =>
+                                    setState(() => _idImage = null),
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  padding: const EdgeInsets.all(4),
+                                  child: const Icon(Icons.close,
+                                      size: 16, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.badge_outlined,
+                                size: 36, color: Colors.grey),
+                            const SizedBox(height: 8),
                             const Text(
-                              "Upload any government-issued ID",
-                              textAlign:
-                                  TextAlign.center,
+                              "Upload any government ID for verification",
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey,
+                                  fontSize: 13, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _pickIdImage,
+                              icon: const Icon(Icons.upload,
+                                  size: 16, color: Color(0xFFF5B544)),
+                              label: const Text(
+                                "Upload ID",
+                                style: TextStyle(color: Color(0xFFF5B544)),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                    color: Color(0xFFF5B544)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(8)),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      if (_idImage != null)
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _idImage = null;
-                              });
-                            },
-                            child: Container(
-                              decoration:
-                                  const BoxDecoration(
-                                color: Colors.black,
-                                shape:
-                                    BoxShape.circle,
-                              ),
-                              padding:
-                                  const EdgeInsets.all(
-                                      4),
-                              child: const Icon(
-                                Icons.close,
-                                size: 16,
-                                color:
-                                    Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
                 ),
               ),
 
               const SizedBox(height: 30),
 
+              // ---------- ADD SKILLS (Elizabeth's improved UI) ----------
+              const Text(
+                "ADD SKILLS",
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+
+              const SizedBox(height: 10),
+
+              if (skills.isNotEmpty) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: skills
+                      .map((skill) => _skillChip(skill))
+                      .toList(),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _skillController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration:
+                          _inputDecoration("Type a skill and press enter"),
+                      onFieldSubmitted: (_) => _addSkill(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: _addSkill,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF5B544),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.add, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              const Text(
+                "e.g. Plumbing, Electrician, Painting, Carpentry",
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+
+              const SizedBox(height: 30),
+
+              // ---------- SAVE BUTTON ----------
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -430,45 +503,36 @@ class _CompleteProfileScreenState
                   onPressed: _isLoading
                       ? null
                       : () {
-                          if (_formKey
-                              .currentState!
-                              .validate()) {
-
-                            if (_profileImage == null ||
-                                _idImage == null) {
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(
+                          if (_formKey.currentState!.validate()) {
+                            if (_profileImage == null || _idImage == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                    content: Text(
-                                        "Photo and ID required")),
+                                    content:
+                                        Text("Photo and ID required")),
                               );
                               return;
                             }
-
+                            if (_selectedLat == null || _selectedLng == null) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text("Please pick your location")),
+  );
+  return;
+}
                             _saveProfile();
                           }
                         },
-                  style:
-                      ElevatedButton.styleFrom(
-                    backgroundColor:
-                        const Color(0xFFF5B544),
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(12),
-                    ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF5B544),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(
-                          color: Colors.black)
-                      : const Text(
-                          "Save & Continue",
+                      ? const CircularProgressIndicator(color: Colors.black)
+                      : const Text("Save & Continue",
                           style: TextStyle(
                               fontSize: 16,
-                              fontWeight:
-                                  FontWeight.w600,
-                              color: Colors.black),
-                        ),
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black)),
                 ),
               ),
 
@@ -480,20 +544,45 @@ class _CompleteProfileScreenState
     );
   }
 
+  // ✅ ELIZABETH: skill chip with remove button
+  Widget _skillChip(String skill) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3DC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF5B544)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(skill,
+              style: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w500)),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: () => _removeSkill(skill),
+            child: const Icon(Icons.close,
+                size: 14, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _label(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(text,
+          style: const TextStyle(
+              fontSize: 14, fontWeight: FontWeight.w500)),
     );
   }
 
   Widget _textField({
     required TextEditingController controller,
     required String hint,
-    TextInputType keyboardType =
-        TextInputType.text,
+    TextInputType keyboardType = TextInputType.text,
     required String? Function(String?) validator,
   }) {
     return TextFormField(
@@ -508,26 +597,14 @@ class _CompleteProfileScreenState
     return InputDecoration(
       hintText: hint,
       contentPadding:
-          const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14),
-      enabledBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(12),
-        borderSide:
-            const BorderSide(
-                color:
-                    Color(0xFFE0E0E0)),
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
       ),
-      focusedBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(12),
-        borderSide:
-            const BorderSide(
-                color:
-                    Colors.orange),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.orange),
       ),
     );
   }

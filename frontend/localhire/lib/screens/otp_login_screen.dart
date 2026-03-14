@@ -1,29 +1,25 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart'; 
 import '../services/auth_service.dart';
-import 'complete_profile.dart';
+import '../services/chat_service.dart';
+import 'home_screen.dart';
 
-class OtpVerificationScreen extends StatefulWidget {
+class OtpLoginScreen extends StatefulWidget {
   final String verificationId;
-  final String username;
-  final String password;
   final String phone;
 
-  const OtpVerificationScreen({
+  const OtpLoginScreen({
     super.key,
     required this.verificationId,
-    required this.username,
-    required this.password,
     required this.phone,
   });
 
   @override
-  State<OtpVerificationScreen> createState() =>
-      _OtpVerificationScreenState();
+  State<OtpLoginScreen> createState() => _OtpLoginScreenState();
 }
 
-class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
+class _OtpLoginScreenState extends State<OtpLoginScreen> {
   final AuthService _authService = AuthService();
   final List<TextEditingController> _controllers =
       List.generate(6, (_) => TextEditingController());
@@ -65,7 +61,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   void _verifyOtp() async {
     String otp = _controllers.map((c) => c.text).join();
-
     if (otp.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please enter complete OTP")),
@@ -76,22 +71,31 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // Step 1: Verify OTP → restores Firebase Auth session
       await _authService.verifyOTP(
         verificationId: widget.verificationId,
         smsCode: otp,
       );
 
-      setState(() => _isLoading = false);
+      // Step 2: Get userId from Firestore using phone
+      final userId = await _authService.getUserIdByPhone(widget.phone);
 
-      Navigator.pushReplacement(
+      if (userId == null) {
+        throw Exception("User not found");
+      }
+
+      // Step 3: Save session + set ChatService
+      await _authService.saveSession(userId);
+      ChatService().setCurrentUser(userId);
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
-          builder: (context) => CompleteProfileScreen(
-            username: widget.username,
-            password: widget.password,
-            phone: widget.phone,
-          ),
+          builder: (_) => HomeScreen(userId: userId),
         ),
+        (route) => false,
       );
     } catch (e) {
       setState(() => _isLoading = false);
@@ -165,7 +169,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.black)
-                    : const Text("Verify & Proceed",
+                    : const Text("Verify & Login",
                         style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -182,8 +186,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color:
-                      _canResend ? Colors.orange.shade600 : Colors.grey,
+                  color: _canResend
+                      ? Colors.orange.shade600
+                      : Colors.grey,
                 ),
               ),
             ),

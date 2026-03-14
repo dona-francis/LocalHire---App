@@ -18,13 +18,13 @@ class _SavedScreenState extends State<SavedScreen> {
       "name": "Arun Kumar",
       "location": "Mumbai, Maharashtra",
       "image": "https://randomuser.me/api/portraits/men/32.jpg",
-      "uid": "PASTE_ARUN_UID_HERE",        // ← replace with real UID from Firebase Auth
+      "uid": "fAmiOclF3VTKSpg47y2bLzaLMTR2",      
     },
     {
       "name": "Priya Sharma",
       "location": "Pune, Maharashtra",
       "image": "https://randomuser.me/api/portraits/women/44.jpg",
-      "uid": "fAmiOclF3VTKSpg47y2bLzaLMTR2",
+      "uid": "DiSUd0gqLEZZl86GFt8S2bT45xl2",
     },
     {
       "name": "Rajesh Singh",
