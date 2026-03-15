@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:google_places_flutter/google_places_flutter.dart';
+import 'package:google_places_flutter/model/prediction.dart';
+
+const String kGoogleApiKey = "AIzaSyA00DjHyTf69bXd9e9MKbN3G8GZE00C0rQ";
 
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
@@ -11,13 +15,20 @@ class LocationPickerScreen extends StatefulWidget {
 }
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
+  // ── Map ────────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
   LatLng _selectedPosition = const LatLng(10.8505, 76.2711); // Default: Kerala
-  String _selectedAddress = "Move the map to select location";
+
+  // ── Address / loading ──────────────────────────────────────────────────────
+  String _selectedAddress = "Move the map or search a location";
   bool _isLoadingAddress = false;
   bool _isLoadingLocation = false;
 
-  // This runs when user moves the map and lifts finger
+  // ── Search ─────────────────────────────────────────────────────────────────
+  final TextEditingController _searchController = TextEditingController();
+
+  // ── Camera idle → reverse geocode ─────────────────────────────────────────
+
   Future<void> _onCameraIdle() async {
     setState(() => _isLoadingAddress = true);
     try {
@@ -27,9 +38,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       );
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
+        final address =
+            "${place.subLocality ?? ''}, ${place.locality ?? ''}, ${place.administrativeArea ?? ''}"
+                .trim()
+                .replaceAll(RegExp(r'^,\s*|,\s*$'), '');
         setState(() {
-          _selectedAddress =
-              "${place.subLocality ?? ''}, ${place.locality ?? ''}, ${place.administrativeArea ?? ''}".trim();
+          _selectedAddress = address.isEmpty ? "Unknown location" : address;
+          _searchController.text = _selectedAddress;
         });
       }
     } catch (e) {
@@ -38,34 +53,27 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     setState(() => _isLoadingAddress = false);
   }
 
-  // This gets the user's live GPS location
+  // ── My location ────────────────────────────────────────────────────────────
+
   Future<void> _goToMyLocation() async {
     setState(() => _isLoadingLocation = true);
     try {
-      // Check permission
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Location permission denied")),
-          );
+          _showSnack("Location permission denied");
           setState(() => _isLoadingLocation = false);
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  "Location permission permanently denied. Enable it from settings.")),
-        );
+        _showSnack("Enable location from device settings");
         setState(() => _isLoadingLocation = false);
         return;
       }
 
-      // Get current position
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
@@ -73,17 +81,21 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       final newPos = LatLng(position.latitude, position.longitude);
       setState(() => _selectedPosition = newPos);
 
-      // Move map camera to current location
       _mapController?.animateCamera(
         CameraUpdate.newLatLngZoom(newPos, 15),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error getting location: $e")),
-      );
+      _showSnack("Error getting location: $e");
     }
     setState(() => _isLoadingLocation = false);
   }
+
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +110,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       ),
       body: Stack(
         children: [
-          // ---------- MAP ----------
+          // ── MAP ────────────────────────────────────────────────────────────
           GoogleMap(
             initialCameraPosition: CameraPosition(
               target: _selectedPosition,
@@ -109,31 +121,104 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             onCameraMove: (position) {
-              // Update position as user drags map
               setState(() => _selectedPosition = position.target);
             },
             onCameraIdle: _onCameraIdle,
           ),
 
-          // ---------- CENTER PIN (always stays in center) ----------
+          // ── CENTER PIN ────────────────────────────────────────────────────
           const Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.location_pin, size: 50, color: Color(0xFFF5B544)),
-                SizedBox(height: 40), // offset so pin tip is at center
+                Icon(Icons.location_pin,
+                    size: 50, color: Color(0xFFF5B544)),
+                SizedBox(height: 40),
               ],
             ),
           ),
 
-          // ---------- TOP ADDRESS CARD ----------
+          // ── SEARCH BAR (google_places_flutter handles suggestions itself) ──
           Positioned(
             top: 16,
             left: 16,
             right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
+            child: GooglePlaceAutoCompleteTextField(
+              textEditingController: _searchController,
+              googleAPIKey: kGoogleApiKey,
+              inputDecoration: InputDecoration(
+                hintText: "Search location...",
+                hintStyle: const TextStyle(color: Colors.grey),
+                prefixIcon:
+                    const Icon(Icons.search, color: Color(0xFFF5B544)),
+                suffixIcon: _isLoadingAddress
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFFF5B544)),
+                        ),
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                    vertical: 14, horizontal: 4),
+                filled: true,
+                fillColor: Colors.white,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: Color(0xFFF5B544), width: 1.5),
+                ),
+              ),
+              debounceTime: 400,
+              countries: const [], // e.g. ['in'] to restrict to India
+              isLatLngRequired: true,
+              getPlaceDetailWithLatLng: (Prediction prediction) {
+                final lat = double.tryParse(prediction.lat ?? '');
+                final lng = double.tryParse(prediction.lng ?? '');
+                if (lat != null && lng != null) {
+                  final newPos = LatLng(lat, lng);
+                  setState(() {
+                    _selectedPosition = newPos;
+                    _selectedAddress =
+                        prediction.description ?? "Selected location";
+                    _searchController.text = _selectedAddress;
+                  });
+                  _mapController?.animateCamera(
+                    CameraUpdate.newLatLngZoom(newPos, 15),
+                  );
+                }
+              },
+              itemClick: (Prediction prediction) {
+                _searchController.text = prediction.description ?? '';
+                _searchController.selection = TextSelection.fromPosition(
+                  TextPosition(
+                      offset: _searchController.text.length),
+                );
+              },
+              seperatedBuilder: const Divider(height: 1),
+              containerHorizontalPadding: 0,
+              itemBuilder: (context, index, Prediction prediction) {
+                return ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.location_on,
+                      color: Color(0xFFF5B544), size: 20),
+                  title: Text(
+                    prediction.description ?? '',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                );
+              },
+              isCrossBtnShown: true,
+              boxDecoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
@@ -143,25 +228,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   )
                 ],
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.location_on, color: Color(0xFFF5B544)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _isLoadingAddress
-                        ? const Text("Getting address...",
-                            style: TextStyle(color: Colors.grey))
-                        : Text(
-                            _selectedAddress,
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                  ),
-                ],
-              ),
             ),
           ),
 
-          // ---------- MY LOCATION BUTTON ----------
+          // ── MY LOCATION BUTTON ────────────────────────────────────────────
           Positioned(
             bottom: 120,
             right: 16,
@@ -175,18 +245,18 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.my_location, color: Color(0xFFF5B544)),
+                  : const Icon(Icons.my_location,
+                      color: Color(0xFFF5B544)),
             ),
           ),
 
-          // ---------- CONFIRM BUTTON ----------
+          // ── CONFIRM BUTTON ────────────────────────────────────────────────
           Positioned(
             bottom: 30,
             left: 16,
             right: 16,
             child: ElevatedButton(
               onPressed: () {
-                // Send location data back to complete_profile screen
                 Navigator.pop(context, {
                   "address": _selectedAddress,
                   "lat": _selectedPosition.latitude,

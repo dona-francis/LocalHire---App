@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'login_screen.dart';
 import '../services/auth_service.dart';
 
@@ -17,6 +20,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
 
   bool isHiring = false;
+  bool _sosLoading = false;
+
+  // ── Emergency contacts ──────────────────────────────────────────────────────
+  // Replace these with your real emergency numbers
+  static const List<String> _emergencyNumbers = [
+    '+911234567890',
+    '+919876543210',
+  ];
+  // ────────────────────────────────────────────────────────────────────────────
 
   final Color primaryGold = const Color(0xFFFFB544);
   final Color lightCream = const Color(0xFFFFE7BF);
@@ -36,8 +48,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     fetchReviews();
   }
 
-  Future<void> fetchUserData() async {
+  // ── Data fetching ────────────────────────────────────────────────────────────
 
+  Future<void> fetchUserData() async {
     final doc = await FirebaseFirestore.instance
         .collection("users")
         .doc(widget.userId)
@@ -52,37 +65,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> fetchReviews() async {
-    print("Profile userId: ${widget.userId}");
-   final query = await FirebaseFirestore.instance
-    .collection("reviews")
-    .where("toUserId", isEqualTo: widget.userId)
-    .orderBy("createdAt", descending: true)
-    .limit(3)
-    .get();
-print("Total reviews fetched: ${query.docs.length}");
+    final query = await FirebaseFirestore.instance
+        .collection("reviews")
+        .where("toUserId", isEqualTo: widget.userId)
+        .orderBy("createdAt", descending: true)
+        .limit(3)
+        .get();
+
     double total = 0;
     reviews.clear();
 
     for (var doc in query.docs) {
+      final data = doc.data();
 
-    final data = doc.data();
+      final userDoc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(data["fromUserId"])
+          .get();
 
-    // fetch reviewer name
-    final userDoc = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(data["fromUserId"])
-        .get();
+      final reviewerName = userDoc.data()?["name"] ?? "Anonymous";
 
-    final reviewerName = userDoc.data()?["name"] ?? "Anonymous";
+      reviews.add({
+        "comment": data["comment"],
+        "rating": data["rating"],
+        "reviewerName": reviewerName,
+      });
 
-    reviews.add({
-      "comment": data["comment"],
-      "rating": data["rating"],
-      "reviewerName": reviewerName
-    });
-
-    total += (data["rating"] ?? 0);
-  }
+      total += (data["rating"] ?? 0);
+    }
 
     if (reviews.isNotEmpty) {
       averageRating = total / reviews.length;
@@ -93,9 +103,256 @@ print("Total reviews fetched: ${query.docs.length}");
     });
   }
 
+  // ── SOS logic ────────────────────────────────────────────────────────────────
+
+  Future<void> _handleSOS() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool hasSeenSOSWarning =
+        prefs.getBool('sos_warning_accepted') ?? false;
+
+    if (!hasSeenSOSWarning) {
+      // Show first-time warning dialog
+      final accepted = await _showSOSWarningDialog();
+      if (accepted == true) {
+        await prefs.setBool('sos_warning_accepted', true);
+        // Don't trigger SOS on first acceptance — just educate the user
+        return;
+      }
+      return;
+    }
+
+    // Second tap onwards → trigger SOS
+    await _triggerSOS();
+  }
+
+  Future<bool?> _showSOSWarningDialog() {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                color: localRed, size: 28),
+            const SizedBox(width: 8),
+            const Text(
+              "SOS Emergency",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Text(
+            "🚨 The SOS button is for REAL emergencies only.\n\n"
+            "When activated, it will:\n"
+            "• Immediately send your live location to 2 emergency contacts via SMS\n"
+            "• Include your name and current employer details\n"
+            "• Notify the LocalHire admin team\n\n"
+            "⚠️ Please do NOT press this button unless you are in genuine danger or distress.\n\n"
+            "Tap OK to acknowledge this. The next time you press SOS, the alert will be sent immediately.",
+            style: TextStyle(height: 1.6),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel",
+                style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE53935),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("I Understand",
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _triggerSOS() async {
+    // Show confirmation before actually sending
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.sos, color: localRed, size: 28),
+            const SizedBox(width: 8),
+            const Text("Send SOS?",
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text(
+          "This will send your live location and details to your emergency contacts RIGHT NOW.\n\nAre you sure?",
+          style: TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel",
+                style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE53935),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("YES, SEND SOS",
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _sosLoading = true);
+
+    try {
+      // 1. Get live location
+      final position = await _getLiveLocation();
+      if (position == null) {
+        _showSnack("Could not get location. Please enable location services.",
+            isError: true);
+        return;
+      }
+
+      // 2. Get employer name from active job
+      final employerName = await _getActiveEmployerName();
+
+      // 3. Build SMS message
+      final employeeName = userData?["name"] ?? "Unknown User";
+      final mapsLink =
+          "https://maps.google.com/?q=${position.latitude},${position.longitude}";
+
+      final smsBody = "🚨 SOS ALERT from LocalHire\n\n"
+          "Employee: $employeeName\n"
+          "Currently working for: $employerName\n"
+          "Live Location: $mapsLink\n"
+          "Coordinates: ${position.latitude.toStringAsFixed(5)}, "
+          "${position.longitude.toStringAsFixed(5)}\n\n"
+          "Please respond immediately!";
+
+      // 4. Send SMS to each emergency number
+      for (final number in _emergencyNumbers) {
+        await _sendSMS(number, smsBody);
+      }
+
+      // 5. Log SOS alert in Firestore for admin dashboard
+      await _logSOSToFirestore(
+        employeeName: employeeName,
+        employerName: employerName,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        mapsLink: mapsLink,
+      );
+
+      _showSnack("✅ SOS sent to emergency contacts!");
+    } catch (e) {
+      _showSnack("Failed to send SOS: $e", isError: true);
+    } finally {
+      setState(() => _sosLoading = false);
+    }
+  }
+
+  Future<Position?> _getLiveLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return null;
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return null;
+    }
+    if (permission == LocationPermission.deniedForever) return null;
+
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+  }
+
+  Future<String> _getActiveEmployerName() async {
+    try {
+      // Look for an active/ongoing job where this user is the worker
+      final jobQuery = await FirebaseFirestore.instance
+          .collection("jobs")
+          .where("workerId", isEqualTo: widget.userId)
+          .where("status", isEqualTo: "active")
+          .limit(1)
+          .get();
+
+      if (jobQuery.docs.isNotEmpty) {
+        final jobData = jobQuery.docs.first.data();
+        final employerId = jobData["employerId"] as String?;
+
+        if (employerId != null) {
+          final employerDoc = await FirebaseFirestore.instance
+              .collection("users")
+              .doc(employerId)
+              .get();
+          return employerDoc.data()?["name"] ?? "Unknown Employer";
+        }
+      }
+    } catch (_) {}
+    return "Not currently on a job";
+  }
+
+  Future<void> _sendSMS(String phoneNumber, String body) async {
+    final uri = Uri(
+      scheme: 'sms',
+      path: phoneNumber,
+      queryParameters: {'body': body},
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  Future<void> _logSOSToFirestore({
+    required String employeeName,
+    required String employerName,
+    required double latitude,
+    required double longitude,
+    required String mapsLink,
+  }) async {
+    await FirebaseFirestore.instance.collection("sos_alerts").add({
+      "userId": widget.userId,
+      "employeeName": employeeName,
+      "employerName": employerName,
+      "latitude": latitude,
+      "longitude": longitude,
+      "mapsLink": mapsLink,
+      "status": "pending", // admin can mark as "resolved"
+      "createdAt": FieldValue.serverTimestamp(),
+    });
+  }
+
+  void _showSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? localRed : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // ── Build ────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-
     if (isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -116,13 +373,11 @@ print("Total reviews fetched: ${query.docs.length}");
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F7),
-
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             children: [
-
               const SizedBox(height: 10),
 
               /// HEADER
@@ -136,8 +391,7 @@ print("Total reviews fetched: ${query.docs.length}");
                   const Text(
                     "Profile",
                     style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold),
+                        fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const Icon(Icons.settings),
                 ],
@@ -170,15 +424,15 @@ print("Total reviews fetched: ${query.docs.length}");
               Text(
                 name,
                 style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold),
+                    fontSize: 22, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 5),
 
               Text(
                 "$location • Member since $memberSince",
-                style: const TextStyle(color: Colors.grey, fontSize: 13),
+                style:
+                    const TextStyle(color: Colors.grey, fontSize: 13),
               ),
 
               const SizedBox(height: 25),
@@ -190,7 +444,8 @@ print("Total reviews fetched: ${query.docs.length}");
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryGold,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
@@ -204,7 +459,8 @@ print("Total reviews fetched: ${query.docs.length}");
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: primaryGold),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
@@ -251,11 +507,13 @@ print("Total reviews fetched: ${query.docs.length}");
 
               _sectionTitle(isHiring ? "Employer Stats" : "Worker Stats"),
               const SizedBox(height: 12),
-              _statCard("—", isHiring ? "Jobs Posted" : "Jobs Completed"),
+              _statCard("—",
+                  isHiring ? "Jobs Posted" : "Jobs Completed"),
 
               const SizedBox(height: 30),
 
-              _sectionTitle(isHiring ? "Employer Feedback" : "Reviews"),
+              _sectionTitle(
+                  isHiring ? "Employer Feedback" : "Reviews"),
               const SizedBox(height: 15),
               _reviewCard(),
 
@@ -266,15 +524,14 @@ print("Total reviews fetched: ${query.docs.length}");
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: skills
-                      .map((skill) => _serviceChip(skill))
-                      .toList(),
+                  children:
+                      skills.map((skill) => _serviceChip(skill)).toList(),
                 ),
               ],
 
               const SizedBox(height: 40),
 
-              _bigButton("SOS EMERGENCY", localRed),
+              _sosButton(),
               const SizedBox(height: 12),
               _bigButton("LOGOUT", Colors.black),
 
@@ -282,6 +539,38 @@ print("Total reviews fetched: ${query.docs.length}");
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ── Widgets ──────────────────────────────────────────────────────────────────
+
+  Widget _sosButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: localRed,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14)),
+        ),
+        onPressed: _sosLoading ? null : _handleSOS,
+        child: _sosLoading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2),
+              )
+            : const Text(
+                "SOS EMERGENCY",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.white,
+                ),
+              ),
       ),
     );
   }
@@ -356,8 +645,7 @@ print("Total reviews fetched: ${query.docs.length}");
         children: [
           Text(number,
               style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold)),
+                  fontSize: 28, fontWeight: FontWeight.bold)),
           const SizedBox(height: 5),
           Text(label,
               style: const TextStyle(
@@ -409,8 +697,7 @@ print("Total reviews fetched: ${query.docs.length}");
           Text(
             averageRating.toStringAsFixed(1),
             style: const TextStyle(
-                fontSize: 40,
-                fontWeight: FontWeight.bold),
+                fontSize: 40, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 5),
           Row(
@@ -429,59 +716,51 @@ print("Total reviews fetched: ${query.docs.length}");
             style: const TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 15),
+          ...reviews.map((review) {
+            final message = review["comment"] ?? "";
+            final rating = review["rating"] ?? 0;
+            final reviewer = review["reviewerName"] ?? "Anonymous";
 
-...reviews.map((review) {
-
-  final message = review["comment"] ?? "";
-  final rating = review["rating"] ?? 0;
-  final reviewer = review["reviewerName"] ?? "Anonymous";
-
-  return Container(
-    margin: const EdgeInsets.only(top: 10),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Colors.grey.shade100,
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-
-        Row(
-          children: [
-            Text(
-              reviewer,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
+            return Container(
+              margin: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
               ),
-            ),
-            const Spacer(),
-            Row(
-              children: List.generate(5, (index) {
-                return Icon(
-                  index < rating.round()
-                      ? Icons.star
-                      : Icons.star_border,
-                  size: 16,
-                  color: const Color(0xFFFFB544),
-                );
-              }),
-            )
-          ],
-        ),
-
-        const SizedBox(height: 6),
-
-        Text(
-          message,
-          style: const TextStyle(fontSize: 13),
-        ),
-
-      ],
-    ),
-  );
-
-}).toList(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        reviewer,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: List.generate(5, (index) {
+                          return Icon(
+                            index < rating.round()
+                                ? Icons.star
+                                : Icons.star_border,
+                            size: 16,
+                            color: const Color(0xFFFFB544),
+                          );
+                        }),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    message,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
         ],
       ),
     );
@@ -489,8 +768,7 @@ print("Total reviews fetched: ${query.docs.length}");
 
   Widget _serviceChip(String text) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: lightCream,
         borderRadius: BorderRadius.circular(10),
@@ -500,41 +778,38 @@ print("Total reviews fetched: ${query.docs.length}");
     );
   }
 
- Widget _bigButton(String text, Color color) {
-  return SizedBox(
-    width: double.infinity,
-    child: ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14)),
-      ),
-      onPressed: () async {
-
-        if (text == "LOGOUT") {
-
-          await FirebaseAuth.instance.signOut();
-          await _authService.logout();
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const LoginScreen(),
-            ),
-            (route) => false,
-          );
-        }
-
-      },
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-          color: Colors.white,
+  Widget _bigButton(String text, Color color) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14)),
+        ),
+        onPressed: () async {
+          if (text == "LOGOUT") {
+            await FirebaseAuth.instance.signOut();
+            await _authService.logout();
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const LoginScreen(),
+              ),
+              (route) => false,
+            );
+          }
+        },
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            color: Colors.white,
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
