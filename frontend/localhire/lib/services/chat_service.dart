@@ -36,10 +36,13 @@ class ChatService {
   }
 
   // ── 1. Get or create chat ──
+  // ✅ Stores displayNames and displayImages as per-uid maps
+  // displayNames[senderUid] = receiver's name (sender sees receiver)
+  // displayNames[receiverUid] = sender's name (receiver sees sender)
   Future<String> getOrCreateChat({
     required String otherUserId,
-    String? otherUserName,
-    String? otherUserImage,
+    String? otherUserName,   // the OTHER person's name
+    String? otherUserImage,  // the OTHER person's image
     String? createdFrom,
     String? sourceId,
   }) async {
@@ -49,65 +52,121 @@ class ChatService {
         .get();
 
     for (final doc in existing.docs) {
-      final participants = List<String>.from(doc['participants']);
+      final participants =
+          List<String>.from(doc['participants']);
       if (participants.contains(otherUserId)) {
+        // ✅ Backfill displayNames if missing on existing chat
         final data = doc.data() as Map<String, dynamic>;
-        if ((data['otherUserName'] ?? '').toString().isEmpty) {
-          final info = otherUserName != null
-              ? {'name': otherUserName, 'image': otherUserImage}
-              : await _fetchUserInfo(otherUserId);
-          await doc.reference.set(
-            {
-              'otherUserName': info['name'] ?? '',
-              'otherUserImage': info['image'],
-            },
-            SetOptions(merge: true),
+        final displayNames =
+            data['displayNames'] as Map<String, dynamic>? ?? {};
+        if (!displayNames.containsKey(currentUserId)) {
+          await _backfillDisplayNames(
+            docRef: doc.reference,
+            currentUserId: currentUserId,
+            otherUserId: otherUserId,
+            otherUserName: otherUserName,
+            otherUserImage: otherUserImage,
           );
         }
         return doc.id;
       }
     }
 
-    final info = otherUserName != null
+    // ── Fetch both users' info for new chat ──
+    // Sender already knows receiver's name (passed in)
+    // We need to also fetch sender's own info for receiver to see
+    final receiverInfo = otherUserName != null
         ? {'name': otherUserName, 'image': otherUserImage}
         : await _fetchUserInfo(otherUserId);
 
+    final senderInfo = await _fetchUserInfo(currentUserId);
+
+    // ✅ displayNames[senderUid] = receiver's name
+    //    displayNames[receiverUid] = sender's name
     final newChat = await _db.collection('chats').add({
       'participants': [currentUserId, otherUserId],
       'lastMessage': '',
       'lastMessageTime': FieldValue.serverTimestamp(),
       'createdFrom': createdFrom,
       'sourceId': sourceId,
-      'otherUserName': info['name'] ?? '',
-      'otherUserImage': info['image'],
-      // ✅ Initialize unread counts to 0 for both users
       'unreadCounts': {
         currentUserId: 0,
         otherUserId: 0,
+      },
+      'acceptedBy': [currentUserId],
+      // ✅ Each uid sees the OTHER person's name/image
+      'displayNames': {
+        currentUserId: receiverInfo['name'] ?? '',
+        otherUserId: senderInfo['name'] ?? '',
+      },
+      'displayImages': {
+        currentUserId: receiverInfo['image'],
+        otherUserId: senderInfo['image'],
       },
     });
 
     return newChat.id;
   }
 
-  // ── 2. Send message — increments receiver's unread count ──
+  // ── Helper: backfill displayNames on old docs ──
+  Future<void> _backfillDisplayNames({
+    required DocumentReference docRef,
+    required String currentUserId,
+    required String otherUserId,
+    String? otherUserName,
+    String? otherUserImage,
+  }) async {
+    final receiverInfo = otherUserName != null
+        ? {'name': otherUserName, 'image': otherUserImage}
+        : await _fetchUserInfo(otherUserId);
+    final senderInfo = await _fetchUserInfo(currentUserId);
+
+    await docRef.set(
+      {
+        'displayNames': {
+          currentUserId: receiverInfo['name'] ?? '',
+          otherUserId: senderInfo['name'] ?? '',
+        },
+        'displayImages': {
+          currentUserId: receiverInfo['image'],
+          otherUserId: senderInfo['image'],
+        },
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  // ── 2. Accept a chat request ──
+  Future<void> acceptChatRequest(String chatId) async {
+    await _db.collection('chats').doc(chatId).update({
+      'acceptedBy': FieldValue.arrayUnion([currentUserId]),
+    });
+  }
+
+  // ── 3. Decline a chat request ──
+  Future<void> declineChatRequest(String chatId) async {
+    await _db.collection('chats').doc(chatId).update({
+      'declinedBy': FieldValue.arrayUnion([currentUserId]),
+    });
+  }
+
+  // ── 4. Send message ──
   Future<void> sendMessage({
     required String chatId,
     required String text,
     required String type,
     String? fileUrl,
   }) async {
-    // ✅ Get the other participant to increment their unread count
-    final chatDoc = await _db.collection('chats').doc(chatId).get();
+    final chatDoc =
+        await _db.collection('chats').doc(chatId).get();
     final participants =
         List<String>.from(chatDoc.data()?['participants'] ?? []);
-    final otherUserId =
-        participants.firstWhere((id) => id != currentUserId,
-            orElse: () => '');
+    final otherUserId = participants.firstWhere(
+        (id) => id != currentUserId,
+        orElse: () => '');
 
     final batch = _db.batch();
 
-    // Write message
     final msgRef = _db
         .collection('chats')
         .doc(chatId)
@@ -124,8 +183,6 @@ class ChatService {
       if (fileUrl != null) 'fileUrl': fileUrl,
     });
 
-    // ✅ Update chat doc — increment receiver's unread count
-    // FieldValue.increment is atomic — safe for concurrent writes
     batch.set(
       _db.collection('chats').doc(chatId),
       {
@@ -140,7 +197,7 @@ class ChatService {
     await batch.commit();
   }
 
-  // ── 3. Upload file ──
+  // ── 5. Upload file ──
   Future<String> uploadChatFile({
     required File file,
     required String chatId,
@@ -158,7 +215,7 @@ class ChatService {
     return await ref.getDownloadURL();
   }
 
-  // ── 4. Clear chat ──
+  // ── 6. Clear chat ──
   Future<void> clearChat(String chatId) async {
     final messages = await _db
         .collection('chats')
@@ -181,7 +238,7 @@ class ChatService {
     );
   }
 
-  // ── 5. Messages stream ──
+  // ── 7. Messages stream ──
   Stream<List<MessageModel>> getMessages(String chatId) {
     return _db
         .collection('chats')
@@ -195,19 +252,30 @@ class ChatService {
             .toList());
   }
 
-  // ── 6. Chats stream ──
+  // ── 8. Chats stream ──
   Stream<List<ChatModel>> getUserChats() {
     return _db
         .collection('chats')
         .where('participants', arrayContains: currentUserId)
         .snapshots(includeMetadataChanges: false)
         .map((snapshot) => snapshot.docs
+            .where((doc) {
+              final declinedBy = List<String>.from(
+                  doc.data()['declinedBy'] ?? []);
+              return !declinedBy.contains(currentUserId);
+            })
             .map((doc) => ChatModel.fromDoc(doc))
             .toList());
   }
 
-  // ── 7. Mark as read — resets current user's unread count ──
+  // ── 9. Mark as read ──
   Future<void> markMessagesAsRead(String chatId) async {
+    final chatDoc =
+        await _db.collection('chats').doc(chatId).get();
+    final acceptedBy = List<String>.from(
+        chatDoc.data()?['acceptedBy'] ?? []);
+    if (!acceptedBy.contains(currentUserId)) return;
+
     final unread = await _db
         .collection('chats')
         .doc(chatId)
@@ -223,7 +291,6 @@ class ChatService {
       batch.update(doc.reference, {'isRead': true});
     }
 
-    // ✅ Reset this user's unread count to 0
     batch.set(
       _db.collection('chats').doc(chatId),
       {'unreadCounts.$currentUserId': 0},
@@ -233,8 +300,9 @@ class ChatService {
     await batch.commit();
   }
 
-  // ── 8. Delete message ──
-  Future<void> deleteMessage(String chatId, String messageId) async {
+  // ── 10. Delete message ──
+  Future<void> deleteMessage(
+      String chatId, String messageId) async {
     await _db
         .collection('chats')
         .doc(chatId)

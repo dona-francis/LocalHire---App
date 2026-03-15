@@ -7,12 +7,13 @@ class ChatModel {
   final DateTime? lastMessageTime;
   final String? createdFrom;
   final String? sourceId;
-  final String otherUserName;
-  final String? otherUserImage;
-  // ✅ unreadCount is stored as a map per uid in Firestore
-  // e.g. { "uid1": 3, "uid2": 0 }
-  // We parse out the current user's count in chat_screen
   final Map<String, dynamic> unreadCounts;
+  final List<String> acceptedBy;
+  // ✅ Per-user display info — each uid maps to the OTHER
+  // person's name/image as seen by that uid
+  // displayNames[myUid] = "the other person's name I see"
+  final Map<String, dynamic> displayNames;
+  final Map<String, dynamic> displayImages;
 
   ChatModel({
     required this.id,
@@ -21,9 +22,10 @@ class ChatModel {
     this.lastMessageTime,
     this.createdFrom,
     this.sourceId,
-    this.otherUserName = '',
-    this.otherUserImage,
     this.unreadCounts = const {},
+    this.acceptedBy = const [],
+    this.displayNames = const {},
+    this.displayImages = const {},
   });
 
   factory ChatModel.fromDoc(DocumentSnapshot doc) {
@@ -37,14 +39,36 @@ class ChatModel {
           : null,
       createdFrom: data['createdFrom'],
       sourceId: data['sourceId'],
-      otherUserName: data['otherUserName'] ?? '',
-      otherUserImage: data['otherUserImage'],
-      unreadCounts: data['unreadCounts'] as Map<String, dynamic>? ?? {},
+      unreadCounts:
+          data['unreadCounts'] as Map<String, dynamic>? ?? {},
+      acceptedBy:
+          List<String>.from(data['acceptedBy'] ?? []),
+      displayNames:
+          data['displayNames'] as Map<String, dynamic>? ?? {},
+      displayImages:
+          data['displayImages'] as Map<String, dynamic>? ?? {},
     );
   }
 
-  // ✅ Helper — get unread count for a specific uid
-  int unreadFor(String uid) {
-    return (unreadCounts[uid] as int?) ?? 0;
-  }
+  int unreadFor(String uid) =>
+      (unreadCounts[uid] as int?) ?? 0;
+
+  // ✅ Get the name THIS uid should see
+  // displayNames[myUid] = other person's name
+  String nameFor(String uid) =>
+      (displayNames[uid] as String?) ?? '';
+
+  // ✅ Get the image THIS uid should see
+  String? imageFor(String uid) =>
+      displayImages[uid] as String?;
+
+  // ✅ Simple and correct — if uid not in acceptedBy = request
+  bool isRequestFor(String uid) => !acceptedBy.contains(uid);
+
+  bool get isAccepted => acceptedBy.length >= 2;
+
+  // ✅ Keep backward compat for old docs that
+  // still have otherUserName — fallback only
+  String get otherUserName => '';
+  String? get otherUserImage => null;
 }

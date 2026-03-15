@@ -13,6 +13,8 @@ class MessageScreen extends StatefulWidget {
   final String otherUserId;
   final String userName;
   final String? userProfileImage;
+  // ✅ NEW — true when receiver hasn't accepted yet
+  final bool isRequest;
 
   const MessageScreen({
     super.key,
@@ -20,6 +22,7 @@ class MessageScreen extends StatefulWidget {
     required this.otherUserId,
     required this.userName,
     this.userProfileImage,
+    this.isRequest = false, // defaults false — no breaking change
   });
 
   @override
@@ -39,7 +42,10 @@ class _MessageScreenState extends State<MessageScreen> {
   @override
   void initState() {
     super.initState();
-    _chatService.markMessagesAsRead(widget.chatId);
+    // ✅ Only mark read if this is a normal chat, not a request
+    if (!widget.isRequest) {
+      _chatService.markMessagesAsRead(widget.chatId);
+    }
   }
 
   // ── Send text ──
@@ -132,7 +138,7 @@ class _MessageScreenState extends State<MessageScreen> {
     );
   }
 
-  // ── Clear chat — soft delete all, filtered from stream ──
+  // ── Clear chat ──
   Future<void> clearChat() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -267,7 +273,8 @@ class _MessageScreenState extends State<MessageScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Report submitted")));
+                  const SnackBar(
+                      content: Text("Report submitted")));
             },
             child: const Text("Submit"),
           ),
@@ -299,7 +306,7 @@ class _MessageScreenState extends State<MessageScreen> {
   // ── Message bubble ──
   Widget _buildMessageContent(MessageModel msg, bool isMe) {
 
-    // ✅ Photo — tappable for full screen
+    // Photo
     if (msg.type == 'image' && msg.fileUrl != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -339,7 +346,7 @@ class _MessageScreenState extends State<MessageScreen> {
       );
     }
 
-    // ✅ Document — tappable to open
+    // Document
     if (msg.type == 'document' && msg.fileUrl != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -373,7 +380,7 @@ class _MessageScreenState extends State<MessageScreen> {
       );
     }
 
-    // ✅ Location — tappable to open Google Maps
+    // Location
     if (msg.type == 'location' && msg.fileUrl != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -416,7 +423,7 @@ class _MessageScreenState extends State<MessageScreen> {
       );
     }
 
-    // ✅ Text
+    // Text
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -426,6 +433,8 @@ class _MessageScreenState extends State<MessageScreen> {
     );
   }
 
+  // ── Time row ──
+  // ✅ Read receipts disabled for requests
   Widget _timeRow(MessageModel msg, bool isMe) {
     return Padding(
       padding: const EdgeInsets.only(top: 6),
@@ -438,12 +447,200 @@ class _MessageScreenState extends State<MessageScreen> {
                 fontSize: 11, color: Colors.grey),
           ),
           const SizedBox(width: 4),
-          if (isMe)
+          // ✅ No read receipt ticks for request chats
+          if (isMe && !widget.isRequest)
             Icon(Icons.done_all,
                 size: 16,
                 color: msg.isRead
                     ? Colors.orange
                     : Colors.grey),
+        ],
+      ),
+    );
+  }
+
+  // ── Accept/Decline bar — shown instead of input for requests ──
+  Widget _buildRequestBar() {
+    return Container(
+      padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 12,
+          bottom:
+              MediaQuery.of(context).viewPadding.bottom + 12),
+      color: Colors.white,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            "${widget.userName} sent you a message request.",
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontSize: 13, color: Colors.grey),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+
+              // Decline
+              Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    await _chatService
+                        .declineChatRequest(widget.chatId);
+                    if (mounted) Navigator.pop(context);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 13),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.red),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: const Center(
+                      child: Text("Decline",
+                          style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              // Accept
+              Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    await _chatService
+                        .acceptChatRequest(widget.chatId);
+                    // ✅ Mark messages read now that accepted
+                    await _chatService
+                        .markMessagesAsRead(widget.chatId);
+                    if (mounted) {
+                      // ✅ Replace screen with normal chat
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MessageScreen(
+                            chatId: widget.chatId,
+                            otherUserId: widget.otherUserId,
+                            userName: widget.userName,
+                            userProfileImage:
+                                widget.userProfileImage,
+                            isRequest: false,
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 13),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF4A825),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: const Center(
+                      child: Text("Accept",
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Normal input bar ──
+  Widget _buildInputBar() {
+    return Container(
+      padding: EdgeInsets.only(
+          left: 10,
+          right: 10,
+          top: 8,
+          bottom:
+              MediaQuery.of(context).viewPadding.bottom + 8),
+      color: Colors.white,
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.attach_file),
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20)),
+                ),
+                builder: (_) => Padding(
+                  padding: EdgeInsets.only(
+                    bottom:
+                        MediaQuery.of(context).viewPadding.bottom +
+                            20,
+                  ),
+                  child: Wrap(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.photo),
+                        title: const Text("Photo"),
+                        onTap: () {
+                          Navigator.pop(context);
+                          attachPhoto();
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(
+                            Icons.insert_drive_file),
+                        title: const Text("Document"),
+                        onTap: () {
+                          Navigator.pop(context);
+                          attachDocument();
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.location_on),
+                        title: const Text("Live Location"),
+                        onTap: () {
+                          Navigator.pop(context);
+                          sendLocation();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              decoration: const InputDecoration(
+                hintText: "Type a message...",
+                border: InputBorder.none,
+              ),
+              onSubmitted: (_) => sendMessage(),
+            ),
+          ),
+          GestureDetector(
+            onTap: sendMessage,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF4A825),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.send,
+                  color: Colors.white),
+            ),
+          ),
         ],
       ),
     );
@@ -461,7 +658,10 @@ class _MessageScreenState extends State<MessageScreen> {
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 12),
-              color: const Color(0xFFECE6D8),
+              // ✅ Slightly different color for request mode
+              color: widget.isRequest
+                  ? const Color(0xFFEDE8F5)
+                  : const Color(0xFFECE6D8),
               child: _isSelectionMode
                   ? Row(
                       children: [
@@ -512,30 +712,47 @@ class _MessageScreenState extends State<MessageScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(
-                            widget.userName,
-                            style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600),
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.userName,
+                                style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              // ✅ Request label under name
+                              if (widget.isRequest)
+                                const Text(
+                                  "Message Request",
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.deepPurple),
+                                ),
+                            ],
                           ),
                         ),
-                        PopupMenuButton<String>(
-                          onSelected: handleTopMenuAction,
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(
-                                value: "view_profile",
-                                child: Text("View Profile")),
-                            PopupMenuItem(
-                                value: "add_favourite",
-                                child: Text("Add to Favourite")),
-                            PopupMenuItem(
-                                value: "clear_chat",
-                                child: Text("Clear Chat")),
-                            PopupMenuItem(
-                                value: "report",
-                                child: Text("Report")),
-                          ],
-                        ),
+                        // ✅ No menu for requests
+                        if (!widget.isRequest)
+                          PopupMenuButton<String>(
+                            onSelected: handleTopMenuAction,
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                  value: "view_profile",
+                                  child: Text("View Profile")),
+                              PopupMenuItem(
+                                  value: "add_favourite",
+                                  child:
+                                      Text("Add to Favourite")),
+                              PopupMenuItem(
+                                  value: "clear_chat",
+                                  child: Text("Clear Chat")),
+                              PopupMenuItem(
+                                  value: "report",
+                                  child: Text("Report")),
+                            ],
+                          ),
                       ],
                     ),
             ),
@@ -575,12 +792,12 @@ class _MessageScreenState extends State<MessageScreen> {
                         child: CircularProgressIndicator());
                   }
 
-                  // ✅ Empty state — shown after clear chat too
                   if (!snapshot.hasData ||
                       snapshot.data!.isEmpty) {
                     return const Center(
                       child: Text("Say hello! 👋",
-                          style: TextStyle(color: Colors.grey)),
+                          style:
+                              TextStyle(color: Colors.grey)),
                     );
                   }
 
@@ -645,96 +862,10 @@ class _MessageScreenState extends State<MessageScreen> {
               ),
             ),
 
-            // ── Input Bar ──
-            Container(
-              padding: EdgeInsets.only(
-                  left: 10,
-                  right: 10,
-                  top: 8,
-                  bottom:
-                      MediaQuery.of(context).viewPadding.bottom +
-                          8),
-              color: Colors.white,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.attach_file),
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(20)),
-                        ),
-                        builder: (_) => Padding(
-                          padding: EdgeInsets.only(
-                            bottom: MediaQuery.of(context)
-                                    .viewPadding
-                                    .bottom +
-                                20,
-                          ),
-                          child: Wrap(
-                            children: [
-                              ListTile(
-                                leading:
-                                    const Icon(Icons.photo),
-                                title: const Text("Photo"),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  attachPhoto();
-                                },
-                              ),
-                              ListTile(
-                                leading: const Icon(
-                                    Icons.insert_drive_file),
-                                title: const Text("Document"),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  attachDocument();
-                                },
-                              ),
-                              ListTile(
-                                leading: const Icon(
-                                    Icons.location_on),
-                                title:
-                                    const Text("Live Location"),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  sendLocation();
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      decoration: const InputDecoration(
-                        hintText: "Type a message...",
-                        border: InputBorder.none,
-                      ),
-                      onSubmitted: (_) => sendMessage(),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: sendMessage,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF4A825),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.send,
-                          color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // ── Input bar OR Accept/Decline ──
+            widget.isRequest
+                ? _buildRequestBar()
+                : _buildInputBar(),
           ],
         ),
       ),
@@ -742,7 +873,7 @@ class _MessageScreenState extends State<MessageScreen> {
   }
 }
 
-// Full screen image viewer
+// ── Full screen image viewer ──
 class _FullScreenImage extends StatelessWidget {
   final String url;
   const _FullScreenImage({required this.url});
