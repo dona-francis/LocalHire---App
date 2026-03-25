@@ -6,7 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'login_screen.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
-
+import 'edit_profile_screen.dart';
+import 'settings_screen.dart';
 class ProfileScreen extends StatefulWidget {
   final String userId;
 
@@ -449,7 +450,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Text("Profile",
                       style: TextStyle(
                           fontSize: 20, fontWeight: FontWeight.bold)),
-                  const Icon(Icons.settings),
+                  
+                  GestureDetector(
+  onTap: () => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => SettingsScreen(userId: widget.userId),
+    ),
+  ),
+  child: const Icon(Icons.settings),
+),
                 ],
               ),
 
@@ -498,9 +508,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: () {},
-                      icon: const Icon(Icons.edit),
-                      label: const Text("Edit Profile"),
+                      onPressed: () async {
+  final updated = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => EditProfileScreen(userId: widget.userId),
+    ),
+  );
+  if (updated == true) {
+    fetchUserData(); // refresh profile after edits
+  }
+},
+icon: const Icon(Icons.edit),
+label: const Text("Edit Profile"),
                     ),
                   ),
                   const SizedBox(width: 10),
