@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
+import 'dart:async';
 class ProfileScreen extends StatefulWidget {
   final String userId;
 
@@ -28,6 +29,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final Color lightCream = const Color(0xFFFFE7BF);
   final Color localRed = const Color(0xFFE53935);
 
+  int jobsPosted = 0;
+  int jobsCompleted = 0; // for future use  
+
   List<Map<String, dynamic>> reviews = [];
   double averageRating = 0.0;
   bool reviewLoading = true;
@@ -42,6 +46,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     fetchReviews();
   }
 
+@override
+void dispose() {
+  _reviewSubscription?.cancel();
+  super.dispose();
+}
   // ── Data fetching ─────────────────────────────────────────────────────────────
 
   Future<void> fetchUserData() async {
@@ -63,43 +72,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> fetchReviews() async {
-    try {
-      final query = await FirebaseFirestore.instance
-          .collection("reviews")
-          .where("toUserId", isEqualTo: widget.userId)
-          .orderBy("createdAt", descending: true)
-          .limit(3)
+Future<void> fetchJobsPosted() async {
+  try {
+    final query = await FirebaseFirestore.instance
+        .collection("jobs")
+        .where("postedBy", isEqualTo: widget.userId)
+        .get();
+
+    setState(() {
+      jobsPosted = query.docs.length;
+    });
+  } catch (e) {
+    print("Error fetching jobs posted: $e");
+  }
+}
+
+  StreamSubscription? _reviewSubscription;
+
+void fetchReviews() {
+  _reviewSubscription = FirebaseFirestore.instance
+      .collection("reviews")
+      .where("toUserId", isEqualTo: widget.userId)
+      .orderBy("createdAt", descending: true)
+      .limit(3)
+      .snapshots()
+      .listen((query) async {
+    double total = 0;
+    final List<Map<String, dynamic>> fetched = [];
+
+    for (var doc in query.docs) {
+      final data = doc.data();
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(data["fromUserId"])
           .get();
 
-      double total = 0;
-      final List<Map<String, dynamic>> fetched = [];
+      fetched.add({
+        "comment": data["comment"] ?? "",
+        "rating": data["rating"] ?? 0,
+        "reviewerName": userDoc.data()?["name"] ?? "Anonymous",
+      });
 
-      for (var doc in query.docs) {
-        final data = doc.data();
-        final userDoc = await FirebaseFirestore.instance
-            .collection("users")
-            .doc(data["fromUserId"])
-            .get();
+      total += (data["rating"] ?? 0);
+    }
 
-        fetched.add({
-          "comment": data["comment"] ?? "",
-          "rating": data["rating"] ?? 0,
-          "reviewerName": userDoc.data()?["name"] ?? "Anonymous",
-        });
-
-        total += (data["rating"] ?? 0);
-      }
-
+    if (mounted) {
       setState(() {
         reviews = fetched;
-        averageRating = fetched.isNotEmpty ? total / fetched.length : 0.0;
+        averageRating =
+            fetched.isNotEmpty ? total / fetched.length : 0.0;
         reviewLoading = false;
       });
-    } catch (e) {
-      setState(() => reviewLoading = false);
     }
-  }
+  });
+}
 
   // ── SOS logic ─────────────────────────────────────────────────────────────────
 
@@ -310,16 +337,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return "Not currently on a job";
   }
 
-  Future<void> _sendSMS(String phoneNumbers, String body) async {
-    final uri = Uri(
-      scheme: 'sms',
-      path: phoneNumbers,
-      queryParameters: {'body': body},
+ Future<void> _sendSMS(String phoneNumbers, String body) async {
+  final numbersList = phoneNumbers.split(";");
+
+  for (String number in numbersList) {
+    final uri = Uri.parse(
+      "sms:$number?body=${Uri.encodeComponent(body)}",
     );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+
+    await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    await Future.delayed(const Duration(milliseconds: 500));
   }
+}
 
   Future<void> _logSOSToFirestore({
     required String employeeName,
@@ -573,7 +606,23 @@ label: const Text("Edit Profile"),
 
               _sectionTitle(isHiring ? "Employer Stats" : "Worker Stats"),
               const SizedBox(height: 12),
-              _statCard("—", isHiring ? "Jobs Posted" : "Jobs Completed"),
+             isHiring
+  ? StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection("jobs")
+          .where("postedBy", isEqualTo: widget.userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return _statCard("...", "Jobs Posted");
+        }
+
+        final count = snapshot.data!.docs.length;
+
+        return _statCard(count.toString(), "Jobs Posted");
+      },
+    )
+  : _statCard("—", "Jobs Completed"),
 
               const SizedBox(height: 30),
 

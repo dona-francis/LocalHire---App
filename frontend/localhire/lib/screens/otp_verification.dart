@@ -30,6 +30,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final List<FocusNode> _focusNodes =
       List.generate(6, (_) => FocusNode());
 
+  late String _verificationId;
   Timer? _timer;
   int _secondsRemaining = 120;
   bool _canResend = false;
@@ -38,6 +39,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   @override
   void initState() {
     super.initState();
+    _verificationId = widget.verificationId;
     _startTimer();
   }
 
@@ -77,7 +79,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     try {
       await _authService.verifyOTP(
-        verificationId: widget.verificationId,
+        verificationId: _verificationId,
         smsCode: otp,
       );
 
@@ -98,6 +100,28 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );
+    }
+  }
+
+  void _resendOtp() async {
+    setState(() => _isLoading = true);
+    try {
+      await _authService.sendOTP(
+        phone: widget.phone,
+        onCodeSent: (newVerificationId) {
+          setState(() => _verificationId = newVerificationId);
+        },
+      );
+      _startTimer();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("OTP resent successfully")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to resend OTP: $e")),
+      );
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -174,7 +198,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             ),
             const SizedBox(height: 20),
             GestureDetector(
-              onTap: _canResend ? _startTimer : null,
+              onTap: _canResend ? _resendOtp : null,
               child: Text(
                 _canResend
                     ? "Resend OTP"

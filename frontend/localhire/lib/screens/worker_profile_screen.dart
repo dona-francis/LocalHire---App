@@ -20,14 +20,12 @@ class WorkerProfileScreen extends StatefulWidget {
 class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
   final ChatService _chatService = ChatService();
 
-  // ── Cached once in initState — never re-evaluated ──
   late final String _currentUid;
   late final DocumentReference _savedRef;
 
   @override
   void initState() {
     super.initState();
-    // Resolve uid and ref exactly once — no race condition
     _currentUid = FirebaseAuth.instance.currentUser!.uid;
     _savedRef = FirebaseFirestore.instance
         .collection('users')
@@ -36,7 +34,6 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
         .doc(widget.userId);
   }
 
-  // ── Toggle save/unsave ──
   Future<void> _toggleSave(
       String name, String image, bool currentlySaved) async {
     try {
@@ -44,12 +41,10 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
         await _savedRef.delete();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text("Removed from saved profiles")),
+            const SnackBar(content: Text("Removed from saved profiles")),
           );
         }
       } else {
-        //  Write to Firestore — StreamBuilder reacts instantly
         await _savedRef.set({
           'uid': widget.userId,
           'name': name,
@@ -58,7 +53,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Profile saved successfully")),
+            const SnackBar(content: Text("Profile saved ✅")),
           );
         }
       }
@@ -71,14 +66,12 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
     }
   }
 
-  // ── Open chat ──
   Future<void> _startChat(String name, String image) async {
     try {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) =>
-            const Center(child: CircularProgressIndicator()),
+        builder: (_) => const Center(child: CircularProgressIndicator()),
       );
 
       final chatId = await _chatService.getOrCreateChat(
@@ -113,6 +106,52 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
     }
   }
 
+  // ── Fetch jobs provided (posted by this worker) ──
+  Future<int> _fetchJobsProvided() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('jobs')
+        .where('postedBy', isEqualTo: widget.userId)
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  // ── Fetch reviews and compute average rating ──
+  Future<Map<String, dynamic>> _fetchReviewStats() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('reviews')
+        .where('toUserId', isEqualTo: widget.userId)
+        .get();
+
+    if (snap.docs.isEmpty) {
+      return {'average': 0.0, 'count': 0};
+    }
+
+    final total = snap.docs
+        .map((d) => (d['rating'] as num).toDouble())
+        .reduce((a, b) => a + b);
+
+    return {
+      'average': total / snap.docs.length,
+      'count': snap.docs.length,
+    };
+  }
+
+  // ── Build star row from a double rating ──
+  List<Widget> _buildStars(double rating) {
+    List<Widget> stars = [];
+    for (int i = 1; i <= 5; i++) {
+      if (rating >= i) {
+        stars.add(const Icon(Icons.star, color: Color(0xFFEFB04C)));
+      } else if (rating >= i - 0.5) {
+        stars.add(const Icon(Icons.star_half, color: Color(0xFFEFB04C)));
+      } else {
+        stars.add(const Icon(Icons.star_border, color: Color(0xFFEFB04C)));
+      }
+    }
+    return stars;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -136,13 +175,9 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
         ],
       ),
 
-      // ── Outer StreamBuilder: save state ──
-      // _savedRef is stable (late final) — stream never recreated
       body: StreamBuilder<DocumentSnapshot>(
         stream: _savedRef.snapshots(),
         builder: (context, savedSnap) {
-          // ✅ While Firestore hasn't responded yet keep false
-          // — no flicker, no null crash
           final isSaved = savedSnap.data?.exists ?? false;
 
           return FutureBuilder<DocumentSnapshot>(
@@ -152,12 +187,11 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                 .get(),
             builder: (context, profileSnap) {
               if (!profileSnap.hasData) {
-                return const Center(
-                    child: CircularProgressIndicator());
+                return const Center(child: CircularProgressIndicator());
               }
 
-              final data = profileSnap.data!.data()
-                  as Map<String, dynamic>;
+              final data =
+                  profileSnap.data!.data() as Map<String, dynamic>;
               final name = data['name'] ?? 'User';
               final location = data['location'] ?? 'Unknown';
               final about = data['about'] ?? '';
@@ -165,8 +199,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                   'https://randomuser.me/api/portraits/men/32.jpg';
 
               return SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
                     const SizedBox(height: 10),
@@ -199,17 +232,14 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
 
                     const SizedBox(height: 15),
 
-                    // ── Name ──
                     Text(
                       name,
                       style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold),
+                          fontSize: 24, fontWeight: FontWeight.bold),
                     ),
 
                     const SizedBox(height: 6),
 
-                    // ── Location ──
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -230,23 +260,16 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-
-                      
                         GestureDetector(
-                          onTap: () =>
-                              _toggleSave(name, image, isSaved),
+                          onTap: () => _toggleSave(name, image, isSaved),
                           child: AnimatedContainer(
-                            duration:
-                                const Duration(milliseconds: 200),
+                            duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 20, vertical: 12),
                             decoration: BoxDecoration(
-                              borderRadius:
-                                  BorderRadius.circular(30),
+                              borderRadius: BorderRadius.circular(30),
                               border: Border.all(
-                                color: Colors.green,
-                                width: 2,
-                              ),
+                                  color: Colors.green, width: 2),
                               color: isSaved
                                   ? Colors.green.withOpacity(0.10)
                                   : Colors.transparent,
@@ -254,7 +277,6 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                // ✅ Filled when saved, outlined when not
                                 Icon(
                                   isSaved
                                       ? Icons.bookmark
@@ -267,8 +289,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                                   isSaved ? "Saved" : "Save",
                                   style: const TextStyle(
                                       color: Colors.green,
-                                      fontWeight:
-                                          FontWeight.w600),
+                                      fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -277,15 +298,13 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
 
                         const SizedBox(width: 10),
 
-                        // 💬 Message button
                         GestureDetector(
                           onTap: () => _startChat(name, image),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 20, vertical: 12),
                             decoration: BoxDecoration(
-                              borderRadius:
-                                  BorderRadius.circular(30),
+                              borderRadius: BorderRadius.circular(30),
                               border: Border.all(
                                   color: const Color(0xFFEFB04C),
                                   width: 2),
@@ -300,8 +319,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                                   "Message",
                                   style: TextStyle(
                                       color: Color(0xFFEFB04C),
-                                      fontWeight:
-                                          FontWeight.w600),
+                                      fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -310,7 +328,6 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
 
                         const SizedBox(width: 10),
 
-                        // 🔗 Share button
                         GestureDetector(
                           onTap: () {
                             Share.share(
@@ -320,11 +337,9 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              borderRadius:
-                                  BorderRadius.circular(30),
+                              borderRadius: BorderRadius.circular(30),
                               border: Border.all(
-                                  color: Colors.grey.shade400,
-                                  width: 2),
+                                  color: Colors.grey.shade400, width: 2),
                             ),
                             child: Icon(Icons.share,
                                 color: Colors.grey.shade500),
@@ -341,8 +356,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                       child: Text(
                         "About",
                         style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18),
+                            fontWeight: FontWeight.bold, fontSize: 18),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -357,49 +371,84 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
 
                     const SizedBox(height: 25),
 
-                    // ── Stats ──
-                    Row(
-                      children: [
-                        Expanded(
-                            child: _statCard(
-                                "156", "JOBS PROVIDED")),
-                        const SizedBox(width: 15),
-                        Expanded(
-                            child: _statCard(
-                                "142", "JOBS COMPLETED")),
-                      ],
+                    // ── Stats: Jobs Provided (live) ──
+                    FutureBuilder<int>(
+                      future: _fetchJobsProvided(),
+                      builder: (context, jobsSnap) {
+                        final jobsProvided =
+                            jobsSnap.data?.toString() ?? '—';
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: _statCard(jobsProvided, "JOBS PROVIDED"),
+                            ),
+                            const SizedBox(width: 15),
+                            // Jobs completed — placeholder until you
+                            // add a "status: completed" field to jobs
+                            Expanded(
+                              child: _statCard("—", "JOBS COMPLETED"),
+                            ),
+                          ],
+                        );
+                      },
                     ),
 
                     const SizedBox(height: 25),
 
-                    // ── Rating ──
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Rating",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Row(
-                      children: [
-                        Icon(Icons.star, color: Color(0xFFEFB04C)),
-                        Icon(Icons.star, color: Color(0xFFEFB04C)),
-                        Icon(Icons.star, color: Color(0xFFEFB04C)),
-                        Icon(Icons.star, color: Color(0xFFEFB04C)),
-                        Icon(Icons.star_half,
-                            color: Color(0xFFEFB04C)),
-                        SizedBox(width: 10),
-                        Text("4.8",
-                            style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold)),
-                        SizedBox(width: 6),
-                        Text("(124 reviews)",
-                            style: TextStyle(color: Colors.grey)),
-                      ],
+                    // ── Rating (live) ──
+                    FutureBuilder<Map<String, dynamic>>(
+                      future: _fetchReviewStats(),
+                      builder: (context, reviewSnap) {
+                        if (!reviewSnap.hasData) {
+                          return const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              "Rating",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18),
+                            ),
+                          );
+                        }
+
+                        final avg =
+                            (reviewSnap.data!['average'] as double);
+                        final count =
+                            reviewSnap.data!['count'] as int;
+                        final avgDisplay =
+                            avg == 0.0 ? "—" : avg.toStringAsFixed(1);
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Rating",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                ..._buildStars(avg),
+                                const SizedBox(width: 10),
+                                Text(
+                                  avgDisplay,
+                                  style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "($count reviews)",
+                                  style: const TextStyle(
+                                      color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
                     ),
 
                     const SizedBox(height: 30),
@@ -429,8 +478,8 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                   color: Color(0xFFEFB04C))),
           const SizedBox(height: 5),
           Text(label,
-              style: const TextStyle(
-                  fontSize: 12, letterSpacing: 1)),
+              style:
+                  const TextStyle(fontSize: 12, letterSpacing: 1)),
         ],
       ),
     );
