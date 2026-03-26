@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'saved_screen.dart';
@@ -127,6 +128,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   /// SEARCH + FILTER
                   List<Map<String, dynamic>> filteredJobs =
                   jobs.where((job) {
+                    if (userLat == 0 || userLng == 0) {
+  return true;
+}
 
                     final matchesSearch = job["title"]
                         .toString()
@@ -153,26 +157,31 @@ class _HomeScreenState extends State<HomeScreen> {
                         salary >= minPrice && salary <= maxPrice;
 
                     /// DISTANCE FILTER
-                    bool matchesDistance = true;
+         /// DISTANCE FILTER
+bool matchesDistance = true;
 
-                    if (job["locationGeoPoint"] != null &&
-                        userLat != 0) {
+final geo = job["locationGeoPoint"];
 
-                      final geo = job["locationGeoPoint"];
-                       if (geo != null && geo is GeoPoint) {
-                      double meters =
-                      Geolocator.distanceBetween(
-                        userLat,
-                        userLng,
-                        geo.latitude,
-                        geo.longitude,
-                      );
 
-                      double km = meters / 1000;
+if (geo != null &&
+    geo is GeoPoint) {
 
-                      matchesDistance = km <= distance;
-                    }
-                   }
+  double meters = Geolocator.distanceBetween(
+    userLat,
+    userLng,
+    geo.latitude,
+    geo.longitude,
+  );
+
+  double km = meters / 1000;
+  print("Distance: $km");
+  if(km>distance){
+    matchesDistance=false;
+  }
+    }
+
+ 
+
                     return matchesSearch &&
                         matchesType &&
                         matchesPrice &&
