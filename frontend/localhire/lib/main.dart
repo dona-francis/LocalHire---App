@@ -6,7 +6,7 @@ import 'services/chat_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/worker_profile_screen.dart';
 import 'services/auth_service.dart';
-
+import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,32 +58,34 @@ void initState() {
 
 
   void _checkSession() async {
-    final userId = await _authService.getSession();
+  await Future.delayed(const Duration(seconds: 1)); // ✅ temporary safety
 
-    if (!mounted) return;
+  final user = FirebaseAuth.instance.currentUser;
 
-    if (userId != null) {
-      // ✅ Set ChatService user
-      ChatService().setCurrentUser(userId);
+  print("User: $user"); // ✅ debug
 
-      // ✅ Firebase Auth phone session auto-persists — no restore needed
-      // If currentUser is null it means they logged out — send to signup
+  if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => HomeScreen(userId: userId),
-        ),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const SignUpScreen(),
-        ),
-      );
-    }
+  if (user != null) {
+    final userId = user.uid;
+
+    ChatService().setCurrentUser(userId);
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HomeScreen(userId: userId),
+      ),
+    );
+  } else {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SignUpScreen(),
+      ),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {

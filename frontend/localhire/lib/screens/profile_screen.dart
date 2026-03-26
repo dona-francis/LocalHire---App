@@ -42,18 +42,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ── Data fetching ────────────────────────────────────────────────────────────
 
   Future<void> fetchUserData() async {
-    final doc = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(widget.userId)
-        .get();
+  final doc = await FirebaseFirestore.instance
+      .collection("users")
+      .doc(widget.userId)
+      .get();
 
+  setState(() {
     if (doc.exists) {
-      setState(() {
-        userData = doc.data();
-        isLoading = false;
-      });
+      userData = doc.data();
+    } else {
+      userData = {}; // empty instead of null
     }
-  }
+    isLoading = false; // ✅ ALWAYS stop loading
+  });
+}
 
   Future<void> fetchReviews() async {
     final query = await FirebaseFirestore.instance

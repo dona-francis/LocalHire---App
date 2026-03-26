@@ -124,15 +124,24 @@ class _CompleteProfileScreenState
       final authService = AuthService();
       final hashedPassword = authService.hashPassword(widget.password);
 
-      final firebaseUid = FirebaseAuth.instance.currentUser?.uid;
-      if (firebaseUid == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text("Session expired. Please verify OTP again.")),
-        );
-        setState(() => _isLoading = false);
-        return;
-      }
+      final user = FirebaseAuth.instance.currentUser;
+
+// wait a bit if null (fix timing issue)
+if (user == null) {
+  await Future.delayed(const Duration(seconds: 1));
+}
+
+final firebaseUid = FirebaseAuth.instance.currentUser?.uid;
+
+if (firebaseUid == null) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text("Something went wrong. Please try again.")
+    ),
+  );
+  setState(() => _isLoading = false);
+  return;
+}
 
       final userDoc = FirebaseFirestore.instance
           .collection("users")

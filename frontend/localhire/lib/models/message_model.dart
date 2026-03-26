@@ -4,10 +4,11 @@ class MessageModel {
   final String id;
   final String senderId;
   final String text;
-  final String type; // "text", "image", "document", "location"
+  final String type;
   final DateTime timestamp;
   final bool isRead;
   final bool deleted;
+  final String? fileUrl; 
 
   MessageModel({
     required this.id,
@@ -17,9 +18,9 @@ class MessageModel {
     required this.timestamp,
     required this.isRead,
     required this.deleted,
+    this.fileUrl,
   });
 
-  // Convert Firestore document → Dart object
   factory MessageModel.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return MessageModel(
@@ -27,21 +28,22 @@ class MessageModel {
       senderId: data['senderId'] ?? '',
       text: data['text'] ?? '',
       type: data['type'] ?? 'text',
-      timestamp: (data['timestamp'] as Timestamp).toDate(),
+      timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isRead: data['isRead'] ?? false,
       deleted: data['deleted'] ?? false,
+      fileUrl: data['fileUrl'], 
     );
   }
 
-  // Convert Dart object → Map to save to Firestore
   Map<String, dynamic> toMap() {
     return {
       'senderId': senderId,
       'text': text,
       'type': type,
-      'timestamp': FieldValue.serverTimestamp(), // Firebase sets the time, not your phone clock
-      'isRead': isRead,
-      'deleted': deleted,
+      'timestamp': FieldValue.serverTimestamp(),
+      'isRead': false,
+      'deleted': false,
+      if (fileUrl != null) 'fileUrl': fileUrl, 
     };
   }
 }

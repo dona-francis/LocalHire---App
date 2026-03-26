@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/chat_service.dart';
 import 'message_screen.dart';
 
@@ -11,54 +13,23 @@ class SavedScreen extends StatefulWidget {
 
 class _SavedScreenState extends State<SavedScreen> {
   final ChatService _chatService = ChatService();
-  TextEditingController searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
-  List<Map<String, String>> savedProfiles = [
-    {
-      "name": "Arun Kumar",
-      "location": "Mumbai, Maharashtra",
-      "image": "https://randomuser.me/api/portraits/men/32.jpg",
-      "uid": "fAmiOclF3VTKSpg47y2bLzaLMTR2",      
-    },
-    {
-      "name": "Priya Sharma",
-      "location": "Pune, Maharashtra",
-      "image": "https://randomuser.me/api/portraits/women/44.jpg",
-      "uid": "DiSUd0gqLEZZl86GFt8S2bT45xl2",
-    },
-    {
-      "name": "Rajesh Singh",
-      "location": "Bengaluru, Karnataka",
-      "image": "https://randomuser.me/api/portraits/men/45.jpg",
-      "uid": "PASTE_RAJESH_UID_HERE",
-    },
-    {
-      "name": "Ananya Rao",
-      "location": "Hyderabad, Telangana",
-      "image": "https://randomuser.me/api/portraits/women/68.jpg",
-      "uid": "PASTE_ANANYA_UID_HERE",
-    },
-    {
-      "name": "Suresh G.",
-      "location": "Chennai, Tamil Nadu",
-      "image": "https://randomuser.me/api/portraits/men/75.jpg",
-      "uid": "PASTE_SURESH_UID_HERE",
-    },
-  ];
+  int _searchMode = 0;
+  String _searchQuery = '';
 
-  // Start or open existing chat with this profile
-  Future<void> startChat(Map<String, String> profile) async {
-    final uid = profile["uid"] ?? "";
+  String? _currentUid; // ✅ FIXED
 
-    if (uid.isEmpty || uid.startsWith("PASTE_")) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("User ID not set for this profile yet")),
-      );
-      return;
-    }
+  @override
+  void initState() {
+    super.initState();
+    _currentUid = FirebaseAuth.instance.currentUser?.uid; // ✅ FIXED
+  }
 
+  Future<void> _startChat(
+      String uid, String name, String image) async {
+    if (uid.isEmpty) return;
     try {
-      // Show loading
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -68,41 +39,49 @@ class _SavedScreenState extends State<SavedScreen> {
 
       final chatId = await _chatService.getOrCreateChat(
         otherUserId: uid,
-        createdFrom: "saved_profile",   // ← integration hook for later
+        otherUserName: name,
+        otherUserImage: image,
+        createdFrom: "saved_profile",
         sourceId: uid,
       );
 
-      Navigator.pop(context); // close loading
+      if (mounted) Navigator.pop(context);
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MessageScreen(
-            chatId: chatId,
-            otherUserId: uid,
-            userName: profile["name"] ?? "User",
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MessageScreen(
+              chatId: chatId,
+              otherUserId: uid,
+              userName: name,
+              userProfileImage: image.isNotEmpty ? image : null,
+            ),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
-      Navigator.pop(context); // close loading
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to open chat: $e")),
-      );
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to open chat: $e")),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    List<Map<String, String>> filteredList = savedProfiles.where((profile) {
-      return profile["name"]!
-          .toLowerCase()
-          .contains(searchController.text.toLowerCase());
-    }).toList();
+
+    // ✅ FIXED: Prevent crash if user is null
+    if (_currentUid == null) {
+      return const Scaffold(
+        body: Center(child: Text("User not logged in")),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
-
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -112,18 +91,18 @@ class _SavedScreenState extends State<SavedScreen> {
         ),
         centerTitle: true,
       ),
-
       body: Column(
         children: [
 
-          // 🔍 Search Bar (unchanged)
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: TextField(
-              controller: searchController,
-              onChanged: (value) => setState(() {}),
+              controller: _searchController,
+              onChanged: (v) => setState(() => _searchQuery = v),
               decoration: InputDecoration(
-                hintText: "Search profiles...",
+                hintText: _searchMode == 0
+                    ? "Search by name..."
+                    : "Search by skill...",
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.white,
@@ -135,94 +114,196 @@ class _SavedScreenState extends State<SavedScreen> {
             ),
           ),
 
-          // Profile List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: filteredList.length,
-              itemBuilder: (context, index) {
-                var profile = filteredList[index];
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFE8DD),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-
-                      // Profile image (unchanged)
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundImage:
-                            NetworkImage(profile["image"]!),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 4),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFE0E0E0),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _searchMode = 0),
+                      child: Container(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 11),
+                        decoration: BoxDecoration(
+                          color: _searchMode == 0
+                              ? Colors.white
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            "By Name",
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 16),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() => _searchMode = 1);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text("Skill search — Coming Soon 🚧")),
+                        );
+                      },
+                      child: Container(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 11),
+                        decoration: BoxDecoration(
+                          color: _searchMode == 1
+                              ? Colors.white
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            "By Skill",
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
 
-                      // Name + location (unchanged)
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              profile["name"]!,
+          const SizedBox(height: 8),
+
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(_currentUid!) // ✅ SAFE now
+                  .collection('saved_profiles')
+                  .orderBy('savedAt', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState ==
+                    ConnectionState.waiting) {
+                  return const Center(
+                      child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData ||
+                    snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "No saved profiles yet",
+                      style: TextStyle(
+                          color: Colors.grey, fontSize: 16),
+                    ),
+                  );
+                }
+
+                final docs = snapshot.data!.docs.where((doc) {
+                  final data =
+                      doc.data() as Map<String, dynamic>;
+                  final name = (data['name'] ?? '')
+                      .toString()
+                      .toLowerCase();
+                  if (_searchQuery.isEmpty) return true;
+                  if (_searchMode == 0) {
+                    return name.contains(
+                        _searchQuery.toLowerCase());
+                  }
+                  return true;
+                }).toList();
+
+                if (docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "No results found",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data()
+                        as Map<String, dynamic>;
+                    final uid =
+                        data['uid'] as String? ?? '';
+                    final name =
+                        data['name'] as String? ?? 'User';
+                    final image =
+                        data['profileImage'] as String? ?? '';
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFE8DD),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: Colors.grey[300],
+                            backgroundImage: image.isNotEmpty
+                                ? NetworkImage(image)
+                                : null,
+                            child: image.isEmpty
+                                ? Text(
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 20,
+                                        fontWeight:
+                                            FontWeight.bold),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              name,
                               style: const TextStyle(
-                                fontSize: 18,
+                                fontSize: 17,
                                 fontWeight: FontWeight.bold,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                const Icon(Icons.location_on,
-                                    size: 16, color: Colors.grey),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    profile["location"]!,
-                                    style: const TextStyle(color: Colors.grey),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () =>
+                                _startChat(uid, name, image),
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFF4A825),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.message,
+                                color: Colors.white,
+                                size: 22,
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-
-                      // ✅ NEW: Message button
-                      GestureDetector(
-                        onTap: () => startChat(profile),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFF4A825),
-                            shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            Icons.message,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
+                        ],
                       ),
-
-                      // ❤️ Remove button (unchanged)
-                      GestureDetector(
-                        onTap: () {
-                          setState(() => savedProfiles.remove(profile));
-                        },
-                        child: const Icon(
-                          Icons.favorite,
-                          color: Colors.red,
-                          size: 28,
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
