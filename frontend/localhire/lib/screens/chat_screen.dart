@@ -5,8 +5,6 @@ import '../models/chat_model.dart';
 import 'message_screen.dart';
 
 class ChatScreen extends StatefulWidget {
-  // ✅ initialTab: 0 = All, 1 = Unread, 2 = Requests
-  // Passed from NotificationScreen when tapping a message_request notification
   final int initialTab;
 
   const ChatScreen({super.key, this.initialTab = 0});
@@ -27,7 +25,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    // ✅ Honour initialTab passed from notification navigation
+    //  Honour initialTab passed from notification navigation
     _tabIndex = widget.initialTab.clamp(0, 2);
   }
 
