@@ -27,7 +27,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
   @override
   void initState() {
     super.initState();
-    // ✅ Resolve uid and ref exactly once — no race condition
+    // Resolve uid and ref exactly once — no race condition
     _currentUid = FirebaseAuth.instance.currentUser!.uid;
     _savedRef = FirebaseFirestore.instance
         .collection('users')
@@ -41,7 +41,6 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
       String name, String image, bool currentlySaved) async {
     try {
       if (currentlySaved) {
-        // ✅ Delete from Firestore — StreamBuilder reacts instantly
         await _savedRef.delete();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -50,7 +49,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
           );
         }
       } else {
-        // ✅ Write to Firestore — StreamBuilder reacts instantly
+        //  Write to Firestore — StreamBuilder reacts instantly
         await _savedRef.set({
           'uid': widget.userId,
           'name': name,
@@ -59,7 +58,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Profile saved ✅")),
+            const SnackBar(content: Text("Profile saved successfully")),
           );
         }
       }
@@ -232,9 +231,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
 
-                        // ✅ Save button
-                        // Icon/text/color flip the moment Firestore
-                        // confirms the write — zero manual setState
+                      
                         GestureDetector(
                           onTap: () =>
                               _toggleSave(name, image, isSaved),

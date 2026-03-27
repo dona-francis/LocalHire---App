@@ -10,7 +10,7 @@ class NotificationService {
     await _requestPermissions();
     await _setupFCMHandlers();
     String? token = await FirebaseMessaging.instance.getToken();
-    debugPrint("✅ FCM Token: $token");
+    debugPrint(" FCM Token: $token");
   }
 
   static Future<void> _requestPermissions() async {
@@ -29,17 +29,17 @@ class NotificationService {
 
   static Future<void> _setupFCMHandlers() async {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint("📩 Foreground: ${message.notification?.title}");
+      debugPrint(" Foreground: ${message.notification?.title}");
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint("👆 Tapped: ${message.data}");
+      debugPrint(" Tapped: ${message.data}");
     });
 
     RemoteMessage? initialMessage =
         await FirebaseMessaging.instance.getInitialMessage();
     if (initialMessage != null) {
-      debugPrint("🚀 Launched from notification");
+      debugPrint(" Launched from notification");
     }
   }
 
@@ -52,7 +52,7 @@ class NotificationService {
           .collection("users")
           .doc(userId)
           .update({"fcmToken": token});
-      debugPrint("✅ FCM token saved for $userId");
+      debugPrint("FCM token saved for $userId");
     }
 
     // Auto-update token if it refreshes
@@ -61,7 +61,7 @@ class NotificationService {
           .collection("users")
           .doc(userId)
           .update({"fcmToken": newToken});
-      debugPrint("🔄 FCM token refreshed for $userId");
+      debugPrint(" FCM token refreshed for $userId");
     });
   } catch (e) {
     debugPrint("❌ Error saving FCM token: $e");

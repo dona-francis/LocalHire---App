@@ -68,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 10),
             _header(),
             const SizedBox(height: 15),
-            _searchBarWithNotification(), // ✅ search bar + notification icon
+            _searchBarWithNotification(), 
             const SizedBox(height: 15),
             _filterSortRow(),
             const SizedBox(height: 15),
@@ -238,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const SizedBox(width: 10),
 
-          // ✅ Notification icon button
+          //  Notification icon button
           GestureDetector(
             onTap: () {
               Navigator.push(

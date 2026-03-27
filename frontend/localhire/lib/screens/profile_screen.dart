@@ -262,7 +262,7 @@ await _sendSMS(numbers, smsBody);
         mapsLink: mapsLink,
       );
 
-      _showSnack("✅ SOS sent to emergency contacts!");
+      _showSnack(" SOS sent to emergency contacts!");
     } catch (e) {
       _showSnack("Failed to send SOS: $e", isError: true);
     } finally {

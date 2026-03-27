@@ -67,11 +67,11 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   void _checkSession() async {
-  await Future.delayed(const Duration(seconds: 1)); // ✅ temporary safety
+  await Future.delayed(const Duration(seconds: 1)); 
 
   final user = FirebaseAuth.instance.currentUser;
 
-  print("User: $user"); // ✅ debug
+  print("User: $user");
 
   if (!mounted) return;
 
