@@ -1,4 +1,6 @@
 {
     "cmake.sourceDirectory": "C:/Users/LENOVO/LocalHire---App/frontend/localhire/linux",
-    "dart.flutterSdkPath": "C:\\flutter"
+    "dart.flutterSdkPath": "C:\\flutter",
+    "cmake.ignoreCMakeListsMissing": true,
+    "java.configuration.updateBuildConfiguration": "automatic"
 }
