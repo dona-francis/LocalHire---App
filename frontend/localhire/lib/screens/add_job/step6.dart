@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -26,6 +27,7 @@ class Step6 extends StatelessWidget {
     if (jobData.location.isEmpty) return false;
     if (jobData.date == null) return false;
     if (jobData.budget <= 0) return false;
+    if (jobData.lat == 0.0 || jobData.lng == 0.0) return false;
     return true;
   }
 

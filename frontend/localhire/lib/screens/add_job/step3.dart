@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'add_job_screen.dart';
 import '../location_picker_screen.dart';
@@ -44,6 +45,7 @@ class _Step3State extends State<Step3> {
         locationController.text = result["address"] ?? "";
         widget.jobData.lat = result["lat"] ?? 0.0;
         widget.jobData.lng = result["lng"] ?? 0.0;
+        print("Picked location: ${result["lat"]}, ${result["lng"]}");
       });
     }
   }
@@ -223,13 +225,16 @@ class _Step3State extends State<Step3> {
             height: 55,
             child: ElevatedButton(
               onPressed: () {
-                if (locationController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text("Please pick a location")),
-                  );
-                  return;
-                }
+                if (locationController.text.trim().isEmpty ||
+    widget.jobData.lat == 0.0 ||
+    widget.jobData.lng == 0.0) {
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text("Please pick a valid location")),
+  );
+
+  return;
+}
 
                 widget.jobData.locationType = selectedMode;
                 widget.jobData.location = locationController.text.trim();
