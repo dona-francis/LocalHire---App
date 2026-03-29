@@ -18,12 +18,12 @@ class _SavedScreenState extends State<SavedScreen> {
   int _searchMode = 0;
   String _searchQuery = '';
 
-  String? _currentUid; // ✅ FIXED
+  String? _currentUid; 
 
   @override
   void initState() {
     super.initState();
-    _currentUid = FirebaseAuth.instance.currentUser?.uid; // ✅ FIXED
+    _currentUid = FirebaseAuth.instance.currentUser?.uid;
   }
 
   Future<void> _startChat(
@@ -73,7 +73,7 @@ class _SavedScreenState extends State<SavedScreen> {
   @override
   Widget build(BuildContext context) {
 
-    // ✅ FIXED: Prevent crash if user is null
+   
     if (_currentUid == null) {
       return const Scaffold(
         body: Center(child: Text("User not logged in")),
@@ -152,7 +152,7 @@ class _SavedScreenState extends State<SavedScreen> {
                         setState(() => _searchMode = 1);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content: Text("Skill search — Coming Soon 🚧")),
+                              content: Text("Skill search — Coming Soon ")),
                         );
                       },
                       child: Container(
@@ -185,7 +185,7 @@ class _SavedScreenState extends State<SavedScreen> {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
-                  .doc(_currentUid!) // ✅ SAFE now
+                  .doc(_currentUid!) 
                   .collection('saved_profiles')
                   .orderBy('savedAt', descending: true)
                   .snapshots(),

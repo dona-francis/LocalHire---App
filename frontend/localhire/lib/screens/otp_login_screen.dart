@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
+import '../services/notification_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import 'home_screen.dart';
@@ -87,6 +88,7 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
       // Step 3: Save session + set ChatService
       await _authService.saveSession(userId);
       ChatService().setCurrentUser(userId);
+      await NotificationService.saveTokenToFirestore(userId);
 
       if (!mounted) return;
 

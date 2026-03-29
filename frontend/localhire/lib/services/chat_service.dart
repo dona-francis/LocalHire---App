@@ -35,10 +35,6 @@ class ChatService {
     }
   }
 
-  // ── 1. Get or create chat ──
-  // ✅ Stores displayNames and displayImages as per-uid maps
-  // displayNames[senderUid] = receiver's name (sender sees receiver)
-  // displayNames[receiverUid] = sender's name (receiver sees sender)
   Future<String> getOrCreateChat({
     required String otherUserId,
     String? otherUserName,   // the OTHER person's name
@@ -55,7 +51,7 @@ class ChatService {
       final participants =
           List<String>.from(doc['participants']);
       if (participants.contains(otherUserId)) {
-        // ✅ Backfill displayNames if missing on existing chat
+        // Backfill displayNames if missing on existing chat
         final data = doc.data() as Map<String, dynamic>;
         final displayNames =
             data['displayNames'] as Map<String, dynamic>? ?? {};
@@ -71,18 +67,11 @@ class ChatService {
         return doc.id;
       }
     }
-
-    // ── Fetch both users' info for new chat ──
-    // Sender already knows receiver's name (passed in)
-    // We need to also fetch sender's own info for receiver to see
     final receiverInfo = otherUserName != null
         ? {'name': otherUserName, 'image': otherUserImage}
         : await _fetchUserInfo(otherUserId);
 
     final senderInfo = await _fetchUserInfo(currentUserId);
-
-    // ✅ displayNames[senderUid] = receiver's name
-    //    displayNames[receiverUid] = sender's name
     final newChat = await _db.collection('chats').add({
       'participants': [currentUserId, otherUserId],
       'lastMessage': '',
@@ -94,7 +83,7 @@ class ChatService {
         otherUserId: 0,
       },
       'acceptedBy': [currentUserId],
-      // ✅ Each uid sees the OTHER person's name/image
+      // Each uid sees the OTHER person's name/image
       'displayNames': {
         currentUserId: receiverInfo['name'] ?? '',
         otherUserId: senderInfo['name'] ?? '',

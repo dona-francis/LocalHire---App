@@ -53,21 +53,21 @@ class ChatModel {
   int unreadFor(String uid) =>
       (unreadCounts[uid] as int?) ?? 0;
 
-  // ✅ Get the name THIS uid should see
+  // Get the name THIS uid should see
   // displayNames[myUid] = other person's name
   String nameFor(String uid) =>
       (displayNames[uid] as String?) ?? '';
 
-  // ✅ Get the image THIS uid should see
+  //  Get the image THIS uid should see
   String? imageFor(String uid) =>
       displayImages[uid] as String?;
 
-  // ✅ Simple and correct — if uid not in acceptedBy = request
+  // Simple and correct — if uid not in acceptedBy = request
   bool isRequestFor(String uid) => !acceptedBy.contains(uid);
 
   bool get isAccepted => acceptedBy.length >= 2;
 
-  // ✅ Keep backward compat for old docs that
+  //  Keep backward compat for old docs that
   // still have otherUserName — fallback only
   String get otherUserName => '';
   String? get otherUserImage => null;

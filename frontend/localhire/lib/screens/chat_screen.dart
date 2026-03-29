@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../services/chat_service.dart';
 import '../models/chat_model.dart';
 import 'message_screen.dart';
@@ -335,7 +334,7 @@ class _ChatScreenState extends State<ChatScreen> {
 class _ChatItem extends StatefulWidget {
   final ChatModel chat;
   final String otherUserId;
-  // ✅ currentUid passed in — no need to call Auth inside widget
+  //  currentUid passed in — no need to call Auth inside widget
   final String currentUid;
   final bool isPinned;
   final String searchQuery;
@@ -364,7 +363,7 @@ class _ChatItem extends StatefulWidget {
 class _ChatItemState extends State<_ChatItem>
     with AutomaticKeepAliveClientMixin {
 
-  // ✅ Static cache keyed by otherUserId
+  // Static cache keyed by otherUserId
   static final Map<String, Map<String, String?>> _userCache = {};
 
   @override
@@ -383,7 +382,7 @@ class _ChatItemState extends State<_ChatItem>
   @override
   void didUpdateWidget(covariant _ChatItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // ✅ When displayNames backfill completes on stream,
+    //  When displayNames backfill completes on stream,
     // pick up the new name silently without re-fetching
     final newName = widget.chat.nameFor(widget.currentUid);
     final oldName = oldWidget.chat.nameFor(widget.currentUid);
@@ -446,7 +445,7 @@ class _ChatItemState extends State<_ChatItem>
       final otherImage =
           otherDoc.data()?['profileImage'] as String?;
 
-      // ✅ Fetch current user's own info too
+      // Fetch current user's own info too
       // so the other person also sees the correct name
       final myDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -458,7 +457,7 @@ class _ChatItemState extends State<_ChatItem>
       final myImage =
           myDoc.data()?['profileImage'] as String?;
 
-      // ✅ Backfill displayNames for BOTH users
+      //  Backfill displayNames for BOTH users
       // currentUid sees otherName, otherUserId sees myName
       FirebaseFirestore.instance
           .collection('chats')
