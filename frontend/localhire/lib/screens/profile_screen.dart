@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'login_screen.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userId;
@@ -18,8 +18,10 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
+
   bool isHiring = false;
   bool _sosLoading = false;
+  bool _logoutLoading = false;
 
   final Color primaryGold = const Color(0xFFFFB544);
   final Color lightCream = const Color(0xFFFFE7BF);
@@ -39,82 +41,81 @@ class _ProfileScreenState extends State<ProfileScreen> {
     fetchReviews();
   }
 
-  // ── Data fetching ────────────────────────────────────────────────────────────
+  // ── Data fetching ─────────────────────────────────────────────────────────────
 
   Future<void> fetchUserData() async {
-  final doc = await FirebaseFirestore.instance
-      .collection("users")
-      .doc(widget.userId)
-      .get();
-
-  setState(() {
-    if (doc.exists) {
-      userData = doc.data();
-    } else {
-      userData = {}; // empty instead of null
-    }
-    isLoading = false; // ✅ ALWAYS stop loading
-  });
-}
-
-  Future<void> fetchReviews() async {
-    final query = await FirebaseFirestore.instance
-        .collection("reviews")
-        .where("toUserId", isEqualTo: widget.userId)
-        .orderBy("createdAt", descending: true)
-        .limit(3)
-        .get();
-
-    double total = 0;
-    reviews.clear();
-
-    for (var doc in query.docs) {
-      final data = doc.data();
-
-      final userDoc = await FirebaseFirestore.instance
+    try {
+      final doc = await FirebaseFirestore.instance
           .collection("users")
-          .doc(data["fromUserId"])
+          .doc(widget.userId)
           .get();
 
-      final reviewerName = userDoc.data()?["name"] ?? "Anonymous";
-
-      reviews.add({
-        "comment": data["comment"],
-        "rating": data["rating"],
-        "reviewerName": reviewerName,
+      setState(() {
+        userData = doc.exists ? doc.data() : {};
+        isLoading = false;
       });
-
-      total += (data["rating"] ?? 0);
+    } catch (e) {
+      setState(() {
+        userData = {};
+        isLoading = false;
+      });
     }
-
-    if (reviews.isNotEmpty) {
-      averageRating = total / reviews.length;
-    }
-
-    setState(() {
-      reviewLoading = false;
-    });
   }
 
-  // ── SOS logic ────────────────────────────────────────────────────────────────
+  Future<void> fetchReviews() async {
+    try {
+      final query = await FirebaseFirestore.instance
+          .collection("reviews")
+          .where("toUserId", isEqualTo: widget.userId)
+          .orderBy("createdAt", descending: true)
+          .limit(3)
+          .get();
+
+      double total = 0;
+      final List<Map<String, dynamic>> fetched = [];
+
+      for (var doc in query.docs) {
+        final data = doc.data();
+        final userDoc = await FirebaseFirestore.instance
+            .collection("users")
+            .doc(data["fromUserId"])
+            .get();
+
+        fetched.add({
+          "comment": data["comment"] ?? "",
+          "rating": data["rating"] ?? 0,
+          "reviewerName": userDoc.data()?["name"] ?? "Anonymous",
+        });
+
+        total += (data["rating"] ?? 0);
+      }
+
+      setState(() {
+        reviews = fetched;
+        averageRating = fetched.isNotEmpty ? total / fetched.length : 0.0;
+        reviewLoading = false;
+      });
+    } catch (e) {
+      setState(() => reviewLoading = false);
+    }
+  }
+
+  // ── SOS logic ─────────────────────────────────────────────────────────────────
 
   Future<void> _handleSOS() async {
     final prefs = await SharedPreferences.getInstance();
-    final bool hasSeenSOSWarning =
-        prefs.getBool('sos_warning_accepted') ?? false;
+    final bool hasSeenSOSWarning = prefs.getBool('sos_warning_accepted') ?? false;
 
     if (!hasSeenSOSWarning) {
-      // Show first-time warning dialog
       final accepted = await _showSOSWarningDialog();
       if (accepted == true) {
         await prefs.setBool('sos_warning_accepted', true);
-        // Don't trigger SOS on first acceptance — just educate the user
-        return;
+        // First time: educate only, don't trigger SOS
       }
       return;
     }
 
-    // Second tap onwards → trigger SOS
+    // Second tap onwards → confirm then trigger
     await _triggerSOS();
   }
 
@@ -126,32 +127,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded,
-                color: localRed, size: 28),
+            Icon(Icons.warning_amber_rounded, color: localRed, size: 28),
             const SizedBox(width: 8),
-            const Text(
-              "SOS Emergency",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            const Text("SOS Emergency",
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         content: const SingleChildScrollView(
           child: Text(
             "🚨 The SOS button is for REAL emergencies only.\n\n"
             "When activated, it will:\n"
-            "• Immediately send your live location to 2 emergency contacts via SMS\n"
+            "• Immediately send your live location to your emergency contacts via SMS\n"
             "• Include your name and current employer details\n"
             "• Notify the LocalHire admin team\n\n"
-            "⚠️ Please do NOT press this button unless you are in genuine danger or distress.\n\n"
-            "Tap OK to acknowledge this. The next time you press SOS, the alert will be sent immediately.",
+            "⚠️ Please do NOT press this unless you are in genuine danger.\n\n"
+            "Tap OK to acknowledge. The next time you press SOS, the alert will be sent immediately.",
             style: TextStyle(height: 1.6),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel",
-                style: TextStyle(color: Colors.grey)),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -160,8 +157,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("I Understand",
-                style: TextStyle(color: Colors.white)),
+            child:
+                const Text("I Understand", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -169,7 +166,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _triggerSOS() async {
-    // Show confirmation before actually sending
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -191,8 +187,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel",
-                style: TextStyle(color: Colors.grey)),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -237,22 +232,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
           "${position.longitude.toStringAsFixed(5)}\n\n"
           "Please respond immediately!";
 
-      // 4. Fetch emergency contacts from userData and send SMS
-final emergencyContacts = List<Map<String, dynamic>>.from(
-  userData?["emergencyContacts"] ?? [],
-);
+      // 4. Fetch emergency contacts and send SMS
+      final emergencyContacts = List<Map<String, dynamic>>.from(
+        userData?["emergencyContacts"] ?? [],
+      );
 
-if (emergencyContacts.isEmpty) {
-  _showSnack("No emergency contacts found. Please add them in your profile.", isError: true);
-  return;
-}
+      if (emergencyContacts.isEmpty) {
+        _showSnack(
+            "No emergency contacts found. Please add them in your profile.",
+            isError: true);
+        return;
+      }
 
-final numbers = emergencyContacts
-    .map((c) => "+91${c["phone"]?.toString().trim() ?? ""}")
-    .where((p) => p.length > 3)
-    .join(";");
+      final numbers = emergencyContacts
+          .map((c) => "+91${c["phone"]?.toString().trim() ?? ""}")
+          .where((p) => p.length > 3)
+          .join(";");
 
-await _sendSMS(numbers, smsBody);
+      await _sendSMS(numbers, smsBody);
+
       // 5. Log SOS alert in Firestore for admin dashboard
       await _logSOSToFirestore(
         employeeName: employeeName,
@@ -262,11 +260,11 @@ await _sendSMS(numbers, smsBody);
         mapsLink: mapsLink,
       );
 
-      _showSnack(" SOS sent to emergency contacts!");
+      _showSnack("✅ SOS sent to emergency contacts!");
     } catch (e) {
       _showSnack("Failed to send SOS: $e", isError: true);
     } finally {
-      setState(() => _sosLoading = false);
+      if (mounted) setState(() => _sosLoading = false);
     }
   }
 
@@ -288,7 +286,6 @@ await _sendSMS(numbers, smsBody);
 
   Future<String> _getActiveEmployerName() async {
     try {
-      // Look for an active/ongoing job where this user is the worker
       final jobQuery = await FirebaseFirestore.instance
           .collection("jobs")
           .where("workerId", isEqualTo: widget.userId)
@@ -313,15 +310,15 @@ await _sendSMS(numbers, smsBody);
   }
 
   Future<void> _sendSMS(String phoneNumbers, String body) async {
-  final uri = Uri(
-    scheme: 'sms',
-    path: phoneNumbers,
-    queryParameters: {'body': body},
-  );
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final uri = Uri(
+      scheme: 'sms',
+      path: phoneNumbers,
+      queryParameters: {'body': body},
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
-}
 
   Future<void> _logSOSToFirestore({
     required String employeeName,
@@ -337,9 +334,66 @@ await _sendSMS(numbers, smsBody);
       "latitude": latitude,
       "longitude": longitude,
       "mapsLink": mapsLink,
-      "status": "pending", // admin can mark as "resolved"
+      "status": "pending",
       "createdAt": FieldValue.serverTimestamp(),
     });
+  }
+
+  // ── Logout ────────────────────────────────────────────────────────────────────
+
+  Future<void> _handleLogout() async {
+    // Confirm before logging out
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Log Out",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text("Are you sure you want to log out?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.black,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child:
+                const Text("Log Out", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _logoutLoading = true);
+
+    try {
+      // FIX #1: Clear FCM token from Firestore + cancel refresh listener FIRST
+      await NotificationService.clearTokenOnLogout(widget.userId);
+
+      // FIX #2: Only call authService.logout() — it handles signOut internally.
+      // DO NOT call FirebaseAuth.instance.signOut() separately (was called twice before).
+      await _authService.logout();
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _logoutLoading = false);
+        _showSnack("Logout failed: $e", isError: true);
+      }
+    }
   }
 
   void _showSnack(String message, {bool isError = false}) {
@@ -353,7 +407,7 @@ await _sendSMS(numbers, smsBody);
     );
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -371,7 +425,7 @@ await _sendSMS(numbers, smsBody);
 
     String memberSince = "";
     if (createdAt != null) {
-      final date = createdAt.toDate();
+      final date = (createdAt as dynamic).toDate();
       memberSince = "${date.month}/${date.year}";
     }
 
@@ -392,11 +446,9 @@ await _sendSMS(numbers, smsBody);
                     icon: const Icon(Icons.arrow_back),
                     onPressed: () => Navigator.pop(context),
                   ),
-                  const Text(
-                    "Profile",
-                    style: TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
+                  const Text("Profile",
+                      style: TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold)),
                   const Icon(Icons.settings),
                 ],
               ),
@@ -404,39 +456,33 @@ await _sendSMS(numbers, smsBody);
               const SizedBox(height: 20),
 
               /// PROFILE IMAGE
-              Stack(
-                alignment: Alignment.bottomRight,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: primaryGold, width: 4),
-                      shape: BoxShape.circle,
-                    ),
-                    child: CircleAvatar(
-                      radius: 55,
-                      backgroundImage: profileImage != null
-                          ? NetworkImage(profileImage)
-                          : null,
-                    ),
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: primaryGold, width: 4),
+                  shape: BoxShape.circle,
+                ),
+                child: CircleAvatar(
+                  radius: 55,
+                  backgroundImage:
+                      profileImage != null ? NetworkImage(profileImage) : null,
+                  child: profileImage == null
+                      ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                      : null,
+                ),
               ),
 
               const SizedBox(height: 15),
 
-              Text(
-                name,
-                style: const TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.bold),
-              ),
+              Text(name,
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.bold)),
 
               const SizedBox(height: 5),
 
               Text(
                 "$location • Member since $memberSince",
-                style:
-                    const TextStyle(color: Colors.grey, fontSize: 13),
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
               ),
 
               const SizedBox(height: 25),
@@ -448,8 +494,7 @@ await _sendSMS(numbers, smsBody);
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryGold,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
@@ -463,17 +508,14 @@ await _sendSMS(numbers, smsBody);
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: primaryGold),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: () {},
                       icon: Icon(Icons.share, color: primaryGold),
-                      label: Text(
-                        "Share",
-                        style: TextStyle(color: primaryGold),
-                      ),
+                      label:
+                          Text("Share", style: TextStyle(color: primaryGold)),
                     ),
                   ),
                 ],
@@ -481,7 +523,7 @@ await _sendSMS(numbers, smsBody);
 
               const SizedBox(height: 25),
 
-              /// TOGGLE
+              /// HIRING / WORKING TOGGLE
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
@@ -511,13 +553,11 @@ await _sendSMS(numbers, smsBody);
 
               _sectionTitle(isHiring ? "Employer Stats" : "Worker Stats"),
               const SizedBox(height: 12),
-              _statCard("—",
-                  isHiring ? "Jobs Posted" : "Jobs Completed"),
+              _statCard("—", isHiring ? "Jobs Posted" : "Jobs Completed"),
 
               const SizedBox(height: 30),
 
-              _sectionTitle(
-                  isHiring ? "Employer Feedback" : "Reviews"),
+              _sectionTitle(isHiring ? "Employer Feedback" : "Reviews"),
               const SizedBox(height: 15),
               _reviewCard(),
 
@@ -537,8 +577,7 @@ await _sendSMS(numbers, smsBody);
 
               _sosButton(),
               const SizedBox(height: 12),
-              _bigButton("LOGOUT", Colors.black),
-
+              _logoutButton(),
               const SizedBox(height: 60),
             ],
           ),
@@ -547,7 +586,7 @@ await _sendSMS(numbers, smsBody);
     );
   }
 
-  // ── Widgets ──────────────────────────────────────────────────────────────────
+  // ── Widgets ───────────────────────────────────────────────────────────────────
 
   Widget _sosButton() {
     return SizedBox(
@@ -556,8 +595,8 @@ await _sendSMS(numbers, smsBody);
         style: ElevatedButton.styleFrom(
           backgroundColor: localRed,
           padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
         onPressed: _sosLoading ? null : _handleSOS,
         child: _sosLoading
@@ -570,10 +609,40 @@ await _sendSMS(numbers, smsBody);
             : const Text(
                 "SOS EMERGENCY",
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Colors.white,
-                ),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.white),
+              ),
+      ),
+    );
+  }
+
+  // FIX #1 + #2: Dedicated logout button using _handleLogout()
+  // No more inline FirebaseAuth.signOut() + authService.logout() double-call
+  Widget _logoutButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.black,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        onPressed: _logoutLoading ? null : _handleLogout,
+        child: _logoutLoading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2),
+              )
+            : const Text(
+                "LOGOUT",
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.white),
               ),
       ),
     );
@@ -581,7 +650,6 @@ await _sendSMS(numbers, smsBody);
 
   Widget _toggleButton(String text, bool value, IconData icon) {
     final selected = isHiring == value;
-
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => isHiring = value),
@@ -603,8 +671,7 @@ await _sendSMS(numbers, smsBody);
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon,
-                  size: 16,
-                  color: selected ? Colors.black : Colors.grey),
+                  size: 16, color: selected ? Colors.black : Colors.grey),
               const SizedBox(width: 6),
               Text(
                 text,
@@ -625,9 +692,7 @@ await _sendSMS(numbers, smsBody);
       child: Text(
         title.toUpperCase(),
         style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey),
+            fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
       ),
     );
   }
@@ -638,10 +703,7 @@ await _sendSMS(numbers, smsBody);
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(
-              blurRadius: 6,
-              color: Colors.black12,
-              offset: Offset(0, 2))
+          BoxShadow(blurRadius: 6, color: Colors.black12, offset: Offset(0, 2))
         ],
         color: Colors.white,
       ),
@@ -673,9 +735,7 @@ await _sendSMS(numbers, smsBody);
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [
             BoxShadow(
-                blurRadius: 6,
-                color: Colors.black12,
-                offset: Offset(0, 2))
+                blurRadius: 6, color: Colors.black12, offset: Offset(0, 2))
           ],
           color: Colors.white,
         ),
@@ -688,10 +748,7 @@ await _sendSMS(numbers, smsBody);
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(
-              blurRadius: 6,
-              color: Colors.black12,
-              offset: Offset(0, 2))
+          BoxShadow(blurRadius: 6, color: Colors.black12, offset: Offset(0, 2))
         ],
         color: Colors.white,
       ),
@@ -700,25 +757,20 @@ await _sendSMS(numbers, smsBody);
         children: [
           Text(
             averageRating.toStringAsFixed(1),
-            style: const TextStyle(
-                fontSize: 40, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 5),
           Row(
             children: List.generate(5, (index) {
               return Icon(
-                index < averageRating.round()
-                    ? Icons.star
-                    : Icons.star_border,
+                index < averageRating.round() ? Icons.star : Icons.star_border,
                 color: const Color(0xFFFFB544),
               );
             }),
           ),
           const SizedBox(height: 5),
-          Text(
-            "${reviews.length} Reviews",
-            style: const TextStyle(color: Colors.grey),
-          ),
+          Text("${reviews.length} Reviews",
+              style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 15),
           ...reviews.map((review) {
             final message = review["comment"] ?? "";
@@ -737,16 +789,13 @@ await _sendSMS(numbers, smsBody);
                 children: [
                   Row(
                     children: [
-                      Text(
-                        reviewer,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold),
-                      ),
+                      Text(reviewer,
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                       const Spacer(),
                       Row(
                         children: List.generate(5, (index) {
                           return Icon(
-                            index < rating.round()
+                            index < (rating as num).round()
                                 ? Icons.star
                                 : Icons.star_border,
                             size: 16,
@@ -757,14 +806,11 @@ await _sendSMS(numbers, smsBody);
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    message,
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  Text(message, style: const TextStyle(fontSize: 13)),
                 ],
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -777,43 +823,7 @@ await _sendSMS(numbers, smsBody);
         color: lightCream,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(text,
-          style: const TextStyle(fontWeight: FontWeight.w600)),
-    );
-  }
-
-  Widget _bigButton(String text, Color color) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-        ),
-        onPressed: () async {
-          if (text == "LOGOUT") {
-            await FirebaseAuth.instance.signOut();
-            await _authService.logout();
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const LoginScreen(),
-              ),
-              (route) => false,
-            );
-          }
-        },
-        child: Text(
-          text,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: Colors.white,
-          ),
-        ),
-      ),
+      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
     );
   }
 }

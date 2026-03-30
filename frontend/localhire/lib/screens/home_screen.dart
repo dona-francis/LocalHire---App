@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'saved_screen.dart';
@@ -8,6 +7,7 @@ import 'chat_screen.dart';
 import 'notification_screen.dart';
 import 'profile_screen.dart';
 import 'location_picker_screen.dart';
+import 'myactivity_screen.dart';
 import 'package:geolocator/geolocator.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -69,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 10),
             _header(),
             const SizedBox(height: 15),
-            _searchBarWithNotification(), 
+            _searchBarWithNotification(),
             const SizedBox(height: 15),
             _filterSortRow(),
             const SizedBox(height: 15),
@@ -87,16 +87,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     return const Center(child: Text("No Jobs Available"));
                   }
                   List<Map<String, dynamic>> jobs =
-                  snapshot.data!.docs.map((doc) {
+                      snapshot.data!.docs.map((doc) {
                     return doc.data() as Map<String, dynamic>;
                   }).toList();
 
-                  /// SEARCH + FILTER
                   List<Map<String, dynamic>> filteredJobs =
-                  jobs.where((job) {
+                      jobs.where((job) {
                     if (userLat == 0 || userLng == 0) {
-  return true;
-}
+                      return true;
+                    }
 
                     final matchesSearch = job["title"]
                         .toString()
@@ -117,31 +116,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     final matchesPrice =
                         salary >= minPrice && salary <= maxPrice;
 
-                    /// DISTANCE FILTER
-         /// DISTANCE FILTER
-bool matchesDistance = true;
-
-final geo = job["locationGeoPoint"];
-
-
-if (geo != null &&
-    geo is GeoPoint) {
-
-  double meters = Geolocator.distanceBetween(
-    userLat,
-    userLng,
-    geo.latitude,
-    geo.longitude,
-  );
-
-  double km = meters / 1000;
-  print("Distance: $km");
-  if(km>distance){
-    matchesDistance=false;
-  }
-    }
-
- 
+                    bool matchesDistance = true;
+                    final geo = job["locationGeoPoint"];
+                    if (geo != null && geo is GeoPoint) {
+                      double meters = Geolocator.distanceBetween(
+                        userLat,
+                        userLng,
+                        geo.latitude,
+                        geo.longitude,
+                      );
+                      double km = meters / 1000;
+                      if (km > distance) {
+                        matchesDistance = false;
+                      }
+                    }
 
                     return matchesSearch &&
                         matchesType &&
@@ -174,7 +162,6 @@ if (geo != null &&
     );
   }
 
-  /// HEADER — location + app name only
   Widget _header() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -225,18 +212,17 @@ if (geo != null &&
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const Spacer(),
-          
           const SizedBox(width: 28),
         ],
       ),
     );
   }
+
   Widget _searchBarWithNotification() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          // Search bar takes all available space
           Expanded(
             child: TextField(
               onChanged: (value) {
@@ -256,17 +242,13 @@ if (geo != null &&
               ),
             ),
           ),
-
           const SizedBox(width: 10),
-
-          //  Notification icon button
           GestureDetector(
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      NotificationScreen(userId: widget.userId),
+                  builder: (_) => NotificationScreen(userId: widget.userId),
                 ),
               );
             },
@@ -289,41 +271,102 @@ if (geo != null &&
     );
   }
 
-  /// FILTER + SORT
+  /// FILTER + SORT + MY ACTIVITY — FIXED
   Widget _filterSortRow() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
+          // Filter button — fixed width, won't shrink
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.grey.shade200,
               foregroundColor: Colors.black,
               elevation: 0,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
             ),
             onPressed: _showFilterDialog,
-            icon: const Icon(Icons.tune),
+            icon: const Icon(Icons.tune, size: 18),
             label: const Text("Filter"),
           ),
-          const SizedBox(width: 10),
-          DropdownButton<String>(
-            value: selectedSort == "None" ? null : selectedSort,
-            hint: const Text("Sort By"),
-            items: const [
-              DropdownMenuItem(
-                value: "Salary: Low to High",
-                child: Text("Salary: Low to High"),
+
+          const SizedBox(width: 8),
+
+          // Sort By — Flexible so it takes remaining space without overflowing
+          Flexible(
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(20),
               ),
-              DropdownMenuItem(
-                value: "Salary: High to Low",
-                child: Text("Salary: High to Low"),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selectedSort == "None" ? null : selectedSort,
+                  hint: const Text(
+                    "Sort By",
+                    style: TextStyle(fontSize: 14, color: Colors.black87),
+                  ),
+                  icon: const Icon(Icons.keyboard_arrow_down,
+                      color: Colors.black87),
+                  isDense: true,
+                  isExpanded: true, // ← KEY FIX: constrains dropdown to parent width
+                  items: const [
+                    DropdownMenuItem(
+                      value: "Salary: Low to High",
+                      child: Text("Salary: Low to High"),
+                    ),
+                    DropdownMenuItem(
+                      value: "Salary: High to Low",
+                      child: Text("Salary: High to Low"),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      selectedSort = value!;
+                    });
+                  },
+                ),
               ),
-            ],
-            onChanged: (value) {
-              setState(() {
-                selectedSort = value!;
-              });
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // My Activity button — fixed, won't expand
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MyActivityScreen(userId: widget.userId),
+                ),
+              );
             },
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.history, size: 18, color: Colors.black87),
+                  SizedBox(width: 5),
+                  Text(
+                    "My Activity",
+                    style: TextStyle(fontSize: 14, color: Colors.black87),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -485,7 +528,6 @@ if (geo != null &&
     );
   }
 
-  /// JOB CARD
   Widget _jobCard(Map<String, dynamic> job) {
     final String type = job["type"] ?? "N/A";
     final bool isInstant = job["isInstantJob"] ?? false;
