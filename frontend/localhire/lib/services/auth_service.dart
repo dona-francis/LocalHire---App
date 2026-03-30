@@ -8,14 +8,14 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  //  Hash password
+  // ── Hash password ────────────────────────────────────────────────────────────
   String hashPassword(String password) {
     final bytes = utf8.encode(password);
     final digest = sha256.convert(bytes);
     return digest.toString();
   }
 
-  //  Send OTP
+  // ── Send OTP ─────────────────────────────────────────────────────────────────
   Future<void> sendOTP({
     required String phone,
     required Function(String verificationId) onCodeSent,
@@ -24,7 +24,7 @@ class AuthService {
       phoneNumber: phone,
       verificationCompleted: (PhoneAuthCredential credential) async {},
       verificationFailed: (FirebaseAuthException e) {
-        print("OTP Failed: ${e.message}");
+        throw Exception(e.message ?? "OTP verification failed");
       },
       codeSent: (String verificationId, int? resendToken) {
         onCodeSent(verificationId);
@@ -35,21 +35,19 @@ class AuthService {
     );
   }
 
-  //  Verify OTP — keeps Firebase Auth session alive 
+  // ── Verify OTP — keeps Firebase Auth session alive ───────────────────────────
   Future<void> verifyOTP({
     required String verificationId,
     required String smsCode,
   }) async {
-    PhoneAuthCredential credential = PhoneAuthProvider.credential(
+    final PhoneAuthCredential credential = PhoneAuthProvider.credential(
       verificationId: verificationId,
       smsCode: smsCode,
     );
-    //  Keep session alive — no signOut
     await _auth.signInWithCredential(credential);
   }
 
-  //  Step 1 of Login — check username/password, return phone number
-  // Returns phone if valid, null if invalid
+  // ── Step 1 of Login — check username/password, return phone ─────────────────
   Future<String?> checkCredentials({
     required String username,
     required String password,
@@ -66,14 +64,12 @@ class AuthService {
     final enteredHash = hashPassword(password);
 
     if (storedHash == enteredHash) {
-      //  Return phone number so login screen can trigger OTP
       return userDoc['phone'] as String;
     }
-
     return null;
   }
 
-  //  Step 2 of Login — after OTP verified, get userId
+  // ── Step 2 of Login — after OTP verified, get userId ────────────────────────
   Future<String?> getUserIdByPhone(String phone) async {
     final query = await _firestore
         .collection('users')
@@ -84,19 +80,37 @@ class AuthService {
     return query.docs.first.id;
   }
 
-  //  Save session
+  // ── Save session ─────────────────────────────────────────────────────────────
   Future<void> saveSession(String userId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userId', userId);
   }
 
-  //  Get session
+  // ── Get session (basic) ──────────────────────────────────────────────────────
   Future<String?> getSession() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('userId');
   }
 
-  // Logout — clears everything
+  // ── FIX #3: Get valid session — cross-validates SharedPrefs + Firebase Auth ──
+  // If Firebase session expired but SharedPrefs still has userId → clear + return null
+  // Prevents ghost sessions where app thinks user is logged in but auth is dead
+  Future<String?> getValidSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('userId');
+    final firebaseUser = _auth.currentUser;
+
+    if (userId != null && firebaseUser == null) {
+      // SharedPrefs has stale session — Firebase session expired/was revoked
+      await prefs.remove('userId');
+      return null;
+    }
+    return userId;
+  }
+
+  // ── Logout — clears FCM listener, SharedPrefs, and Firebase Auth ─────────────
+  // FIX #2: Single signOut here — callers must NOT call FirebaseAuth.signOut() separately
+  // FIX #1: Callers must call NotificationService.clearTokenOnLogout() BEFORE this
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('userId');

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; 
+import 'package:flutter/services.dart';
 import '../services/notification_service.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
@@ -24,8 +24,7 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
   final AuthService _authService = AuthService();
   final List<TextEditingController> _controllers =
       List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes =
-      List.generate(6, (_) => FocusNode());
+  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
   Timer? _timer;
   int _secondsRemaining = 120;
@@ -38,20 +37,6 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
     _startTimer();
   }
 
-  void _startTimer() {
-    _secondsRemaining = 120;
-    _canResend = false;
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_secondsRemaining == 0) {
-        timer.cancel();
-        setState(() => _canResend = true);
-      } else {
-        setState(() => _secondsRemaining--);
-      }
-    });
-  }
-
   @override
   void dispose() {
     _timer?.cancel();
@@ -60,12 +45,24 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
     super.dispose();
   }
 
-  void _verifyOtp() async {
-    String otp = _controllers.map((c) => c.text).join();
+  void _startTimer() {
+    _secondsRemaining = 120;
+    _canResend = false;
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_secondsRemaining == 0) {
+        timer.cancel();
+        if (mounted) setState(() => _canResend = true);
+      } else {
+        if (mounted) setState(() => _secondsRemaining--);
+      }
+    });
+  }
+
+  Future<void> _verifyOtp() async {
+    final otp = _controllers.map((c) => c.text).join();
     if (otp.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter complete OTP")),
-      );
+      _showSnack("Please enter the complete 6-digit OTP");
       return;
     }
 
@@ -80,37 +77,43 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
 
       // Step 2: Get userId from Firestore using phone
       final userId = await _authService.getUserIdByPhone(widget.phone);
-
-      if (userId == null) {
-        throw Exception("User not found");
-      }
+      if (userId == null) throw Exception("User not found. Please register first.");
 
       // Step 3: Save session + set ChatService
       await _authService.saveSession(userId);
       ChatService().setCurrentUser(userId);
+
+      // Step 4: Save FCM token — tied to verified userId, never null user
+      // FIX #4: Called here after auth is fully confirmed, no race condition
       await NotificationService.saveTokenToFirestore(userId);
 
       if (!mounted) return;
 
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (_) => HomeScreen(userId: userId),
-        ),
+        MaterialPageRoute(builder: (_) => HomeScreen(userId: userId)),
         (route) => false,
       );
     } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showSnack("Error: $e");
+      }
     }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    String formattedTime =
-        "${(_secondsRemaining ~/ 60).toString().padLeft(2, '0')}:${(_secondsRemaining % 60).toString().padLeft(2, '0')}";
+    final formattedTime =
+        "${(_secondsRemaining ~/ 60).toString().padLeft(2, '0')}:"
+        "${(_secondsRemaining % 60).toString().padLeft(2, '0')}";
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -122,8 +125,7 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         centerTitle: true,
-        title: const Text("Verify OTP",
-            style: TextStyle(color: Colors.black)),
+        title: const Text("Verify OTP", style: TextStyle(color: Colors.black)),
       ),
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -143,8 +145,7 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
             ),
             const SizedBox(height: 20),
             const Text("Verify OTP",
-                style: TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.bold)),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             const Text("Enter the 6-digit code sent to",
                 style: TextStyle(fontSize: 14, color: Colors.grey)),
@@ -171,26 +172,24 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.black)
-                    : const Text("Verify & Login",
+                    : const Text(
+                        "Verify & Login",
                         style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: Colors.black)),
+                            color: Colors.black),
+                      ),
               ),
             ),
             const SizedBox(height: 20),
             GestureDetector(
               onTap: _canResend ? _startTimer : null,
               child: Text(
-                _canResend
-                    ? "Resend OTP"
-                    : "Resend OTP $formattedTime",
+                _canResend ? "Resend OTP" : "Resend OTP in $formattedTime",
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: _canResend
-                      ? Colors.orange.shade600
-                      : Colors.grey,
+                  color: _canResend ? Colors.orange.shade600 : Colors.grey,
                 ),
               ),
             ),
@@ -219,8 +218,7 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide:
-                const BorderSide(color: Colors.orange, width: 1.5),
+            borderSide: const BorderSide(color: Colors.orange, width: 1.5),
           ),
         ),
         onChanged: (value) {

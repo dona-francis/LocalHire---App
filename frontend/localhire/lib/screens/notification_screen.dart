@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// ── Update these imports to match your project structure ──
+import 'job_details_screen.dart';
+import 'chat_screen.dart';
+
 class NotificationScreen extends StatelessWidget {
   final String userId;
   const NotificationScreen({super.key, required this.userId});
@@ -36,8 +40,7 @@ class NotificationScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.notifications_none,
-                      size: 64, color: Colors.grey),
+                  Icon(Icons.notifications_none, size: 64, color: Colors.grey),
                   SizedBox(height: 12),
                   Text("No notifications yet",
                       style: TextStyle(color: Colors.grey)),
@@ -62,8 +65,8 @@ class NotificationScreen extends StatelessWidget {
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text("Important",
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 10),
                 ...highPriority.map((doc) =>
@@ -76,12 +79,12 @@ class NotificationScreen extends StatelessWidget {
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text("General",
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 10),
-                ...normal.map((doc) =>
-                    _NotificationCard(doc: doc, userId: userId)),
+                ...normal
+                    .map((doc) => _NotificationCard(doc: doc, userId: userId)),
               ],
             ],
           );
@@ -120,6 +123,70 @@ class _NotificationCard extends StatelessWidget {
     return "${diff.inDays}d ago";
   }
 
+  // ── Mark notification as read ──────────────────────────
+  Future<void> _markAsRead() async {
+    await FirebaseFirestore.instance
+        .collection("notifications")
+        .doc(userId)
+        .collection("items")
+        .doc(doc.id)
+        .update({"isRead": true});
+  }
+
+  // ── Delete notification from Firestore ─────────────────
+  Future<void> _deleteNotification() async {
+    await FirebaseFirestore.instance
+        .collection("notifications")
+        .doc(userId)
+        .collection("items")
+        .doc(doc.id)
+        .delete();
+  }
+
+  // ── Navigate to JobDetailsScreen ───────────────────────
+  Future<void> _navigateToJob(BuildContext context, String jobId) async {
+    try {
+      final jobDoc = await FirebaseFirestore.instance
+          .collection("jobs")
+          .doc(jobId)
+          .get();
+
+      if (!jobDoc.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Job no longer available")),
+        );
+        return;
+      }
+
+      final jobData = jobDoc.data() as Map<String, dynamic>;
+      jobData["id"] = jobDoc.id;
+
+      await _markAsRead();
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => JobDetailsScreen(job: jobData),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error loading job: $e")),
+      );
+    }
+  }
+
+  // ── Navigate to ChatScreen (Requests tab) ──────────────
+  Future<void> _navigateToChat(BuildContext context) async {
+    await _markAsRead();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ChatScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = doc.data() as Map<String, dynamic>;
@@ -129,98 +196,149 @@ class _NotificationCard extends StatelessWidget {
     final String subtitle = data["subtitle"] ?? "";
     final bool isRead = data["isRead"] ?? false;
     final Timestamp? createdAt = data["createdAt"];
+    final String jobId = (data["data"] ?? {})["jobId"] ?? "";
+
+    // Determine which action buttons to show
+    final bool isJobNotification =
+        type == "instant_job" || type == "job_posted";
+    final bool isMessageRequest = type == "message_request";
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: GestureDetector(
-        onTap: () async {
-          // Mark as read
-          await FirebaseFirestore.instance
-              .collection("notifications")
-              .doc(userId)
-              .collection("items")
-              .doc(doc.id)
-              .update({"isRead": true});
-        },
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isHigh ? const Color(0xFFF5A623) : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
-            border: !isHigh && !isRead
-                ? Border.all(color: const Color(0xFFF5A623), width: 1.5)
-                : null,
-          ),
-          child: Row(
-            children: [
-              // Icon circle
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: isHigh
-                    ? Colors.white.withValues(alpha: 0.25)
-                    : Colors.grey.shade100,
-                child: Icon(
-                  _iconForType(type),
-                  color: isHigh ? Colors.white : const Color(0xFFF5A623),
-                ),
-              ),
-              const SizedBox(width: 14),
-
-              // Text
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: isHigh ? Colors.white : Colors.black,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isHigh
-                            ? Colors.white70
-                            : Colors.grey[700],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Time or arrow
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    _timeAgo(createdAt),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isHigh ? Colors.white70 : Colors.grey,
-                    ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isHigh ? const Color(0xFFF5A623) : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
+          border: !isHigh && !isRead
+              ? Border.all(color: const Color(0xFFF5A623), width: 1.5)
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Top row: icon + text + time ──────────────
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: isHigh
+                      ? Colors.white.withValues(alpha: 0.25)
+                      : Colors.grey.shade100,
+                  child: Icon(
+                    _iconForType(type),
+                    color: isHigh ? Colors.white : const Color(0xFFF5A623),
                   ),
-                  const SizedBox(height: 4),
-                  Icon(
-                    Icons.chevron_right,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isHigh ? Colors.white : Colors.black,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isHigh ? Colors.white70 : Colors.grey[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  _timeAgo(createdAt),
+                  style: TextStyle(
+                    fontSize: 11,
                     color: isHigh ? Colors.white70 : Colors.grey,
-                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+
+            // ── Action buttons ────────────────────────────
+            if (isJobNotification || isMessageRequest) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // Cancel button — message request only
+                  // Tapping deletes from Firestore + removes from UI
+                  if (isMessageRequest)
+                    TextButton(
+                      onPressed: () async {
+                        await _deleteNotification();
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor:
+                            isHigh ? Colors.white70 : Colors.grey[600],
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: isHigh
+                                ? Colors.white38
+                                : Colors.grey.shade300,
+                          ),
+                        ),
+                      ),
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ),
+
+                  if (isMessageRequest) const SizedBox(width: 8),
+
+                  // View / View Details button
+                  // message_request → ChatScreen (requests tab auto-opens)
+                  // instant_job / job_posted → JobDetailsScreen
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (isMessageRequest) {
+                        await _navigateToChat(context);
+                      } else if (isJobNotification && jobId.isNotEmpty) {
+                        await _navigateToJob(context, jobId);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          isHigh ? Colors.white : const Color(0xFFF5A623),
+                      foregroundColor:
+                          isHigh ? const Color(0xFFF5A623) : Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 6),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: Text(
+                      isMessageRequest ? "View" : "View Details",
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
             ],
-          ),
+          ],
         ),
       ),
     );

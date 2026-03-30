@@ -127,8 +127,8 @@ exports.onRequestAccepted = onDocumentUpdated(
 
 // ═══════════════════════════════════════════════
 // TRIGGER 3 — Instant Job Posted
-// ⚡ Within 50km → HIGH priority
-// 📢 Beyond 50km → NORMAL priority
+// Within 50km → HIGH priority
+//  Beyond 50km → NORMAL priority
 // ═══════════════════════════════════════════════
 exports.onInstantJobPosted = onDocumentCreated(
   "jobs/{jobId}",
@@ -194,8 +194,8 @@ exports.onInstantJobPosted = onDocumentCreated(
 
 // ═══════════════════════════════════════════════
 // TRIGGER 4 — Regular Job Posted
-// 📋 Within 80km → NORMAL priority notification
-// 🚫 Beyond 80km → No notification
+// Within 80km → NORMAL priority notification
+//  Beyond 80km → No notification
 // ═══════════════════════════════════════════════
 exports.onRegularJobPosted = onDocumentCreated(
   "jobs/{jobId}",
