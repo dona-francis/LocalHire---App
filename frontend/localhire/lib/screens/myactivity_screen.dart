@@ -56,7 +56,6 @@ class _MyActivityScreenState extends State<MyActivityScreen>
       body: Column(
         children: [
           const SizedBox(height: 8),
-          // Custom pill tab bar
           SizedBox(
             height: 48,
             child: ListView.builder(
@@ -66,18 +65,14 @@ class _MyActivityScreenState extends State<MyActivityScreen>
               itemBuilder: (context, index) {
                 final selected = _selectedTab == index;
                 return GestureDetector(
-                  onTap: () {
-                    _tabController.animateTo(index);
-                  },
+                  onTap: () => _tabController.animateTo(index),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     margin: const EdgeInsets.only(right: 10),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 10),
                     decoration: BoxDecoration(
-                      color: selected
-                          ? Colors.white
-                          : Colors.transparent,
+                      color: selected ? Colors.white : Colors.transparent,
                       border: Border.all(
                         color: selected
                             ? const Color(0xFFFFB544)
@@ -121,50 +116,67 @@ class _MyActivityScreenState extends State<MyActivityScreen>
 }
 
 // ─────────────────────────────────────────────────────────
-// Tab 1 & 3 — Posted Jobs (active) / Completed
+// Tab 1 & 3 — Posted Jobs: converted to StatefulWidget ✅
 // ─────────────────────────────────────────────────────────
-class _PostedJobsTab extends StatelessWidget {
+class _PostedJobsTab extends StatefulWidget {
   final String userId;
   final bool showCompleted;
-  const _PostedJobsTab(
-      {required this.userId, required this.showCompleted});
+  const _PostedJobsTab({required this.userId, required this.showCompleted});
+
+  @override
+  State<_PostedJobsTab> createState() => _PostedJobsTabState();
+}
+
+class _PostedJobsTabState extends State<_PostedJobsTab>
+    with AutomaticKeepAliveClientMixin {
+
+  // ✅ Cache — same pattern as ChatScreen's _lastKnownChats
+  List<QueryDocumentSnapshot> _lastKnownDocs = [];
+
+  @override
+  bool get wantKeepAlive => true; // ✅ keeps tab alive when switching tabs
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection("jobs")
-          .where("postedBy", isEqualTo: userId)
+          .where("postedBy", isEqualTo: widget.userId)
           .orderBy("createdAt", descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFFFFB544)));
+
+        // ✅ Update cache only when real data arrives
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          _lastKnownDocs = snapshot.data!.docs;
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return _emptyState(
-            icon: Icons.work_outline,
-            message: showCompleted
-                ? "No completed jobs yet."
-                : "You haven't posted any jobs yet.",
-          );
+        // ✅ Show spinner ONLY on true first load (cache is empty)
+        if (_lastKnownDocs.isEmpty &&
+            snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFFB544)));
         }
 
-        // Filter by status
-        final docs = snapshot.data!.docs.where((doc) {
+        // Filter by status using cache
+        final docs = _lastKnownDocs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-          final status = (data["status"] ?? "active").toString().toLowerCase();
-          if (showCompleted) return status == "completed";
+          final status =
+              (data["status"] ?? "active").toString().toLowerCase();
+          if (widget.showCompleted) return status == "completed";
           return status != "completed";
         }).toList();
 
-        if (docs.isEmpty) {
+        if (docs.isEmpty &&
+            snapshot.connectionState == ConnectionState.active) {
           return _emptyState(
-            icon: showCompleted ? Icons.check_circle_outline : Icons.work_outline,
-            message: showCompleted
+            icon: widget.showCompleted
+                ? Icons.check_circle_outline
+                : Icons.work_outline,
+            message: widget.showCompleted
                 ? "No completed jobs yet."
-                : "You haven't posted any active jobs.",
+                : "You haven't posted any jobs yet.",
           );
         }
 
@@ -174,7 +186,8 @@ class _PostedJobsTab extends StatelessWidget {
           itemBuilder: (context, index) {
             final data = docs[index].data() as Map<String, dynamic>;
             final docId = docs[index].id;
-            return _PostedJobCard(job: data, docId: docId, userId: userId);
+            return _PostedJobCard(
+                job: data, docId: docId, userId: widget.userId);
           },
         );
       },
@@ -182,6 +195,74 @@ class _PostedJobsTab extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// Tab 2 — Applied Jobs: converted to StatefulWidget ✅
+// ─────────────────────────────────────────────────────────
+class _AppliedJobsTab extends StatefulWidget {
+  final String userId;
+  const _AppliedJobsTab({required this.userId});
+
+  @override
+  State<_AppliedJobsTab> createState() => _AppliedJobsTabState();
+}
+
+class _AppliedJobsTabState extends State<_AppliedJobsTab>
+    with AutomaticKeepAliveClientMixin {
+
+  // ✅ Cache — same pattern as ChatScreen's _lastKnownChats
+  List<QueryDocumentSnapshot> _lastKnownDocs = [];
+
+  @override
+  bool get wantKeepAlive => true; // ✅ keeps tab alive when switching tabs
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection("jobs")
+          .where("acceptedBy", arrayContains: widget.userId)
+          .orderBy("createdAt", descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+
+        // ✅ Update cache only when real data arrives
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          _lastKnownDocs = snapshot.data!.docs;
+        }
+
+        // ✅ Show spinner ONLY on true first load (cache is empty)
+        if (_lastKnownDocs.isEmpty &&
+            snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFFB544)));
+        }
+
+        if (_lastKnownDocs.isEmpty &&
+            snapshot.connectionState == ConnectionState.active) {
+          return _emptyState(
+            icon: Icons.assignment_outlined,
+            message: "You haven't applied to any jobs yet.",
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: _lastKnownDocs.length,
+          itemBuilder: (context, index) {
+            final data =
+                _lastKnownDocs[index].data() as Map<String, dynamic>;
+            return _AppliedJobCard(job: data, userId: widget.userId);
+          },
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Posted Job Card (unchanged)
+// ─────────────────────────────────────────────────────────
 class _PostedJobCard extends StatelessWidget {
   final Map<String, dynamic> job;
   final String docId;
@@ -203,8 +284,7 @@ class _PostedJobCard extends StatelessWidget {
     if (dateValue != null) {
       if (dateValue is Timestamp) {
         final d = dateValue.toDate();
-        formattedDate =
-            "${_monthName(d.month)} ${d.day}, ${d.year}";
+        formattedDate = "${_monthName(d.month)} ${d.day}, ${d.year}";
       } else if (dateValue is String) {
         formattedDate = dateValue;
       }
@@ -221,7 +301,6 @@ class _PostedJobCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status badge
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -242,103 +321,78 @@ class _PostedJobCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-
-            // Title
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-            ),
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-
-            // Location
             Row(
               children: [
                 const Icon(Icons.location_on_outlined,
                     size: 16, color: Colors.grey),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
-                    location,
-                    style: const TextStyle(
-                        fontSize: 14, color: Colors.black87),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: Text(location,
+                      style: const TextStyle(
+                          fontSize: 14, color: Colors.black87),
+                      overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
             const SizedBox(height: 6),
-
-            // Date
             if (formattedDate.isNotEmpty)
               Row(
                 children: [
                   const Icon(Icons.calendar_today_outlined,
                       size: 15, color: Colors.grey),
                   const SizedBox(width: 4),
-                  Text(
-                    formattedDate,
-                    style: const TextStyle(
-                        fontSize: 14, color: Colors.black87),
-                  ),
+                  Text(formattedDate,
+                      style: const TextStyle(
+                          fontSize: 14, color: Colors.black87)),
                 ],
               ),
-
             const SizedBox(height: 14),
             const Divider(height: 1),
             const SizedBox(height: 14),
-
-            // Bottom row
             Row(
               children: [
                 if (isCompleted) ...[
-                  // Show review/rating if available
                   const Icon(Icons.star_rounded,
                       color: Color(0xFFFFB544), size: 22),
                   const SizedBox(width: 6),
                   Text(
                     job["review"] ?? "Excellent service!",
                     style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
+                        fontWeight: FontWeight.w600, fontSize: 13),
                   ),
                   const Spacer(),
                   GestureDetector(
                     onTap: () {
-                      final jobForDetails = _prepareJob(job);
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) =>
-                              JobDetailsScreen(job: jobForDetails),
+                              JobDetailsScreen(job: _prepareJob(job)),
                         ),
                       );
                     },
                     child: const Text(
                       "View Details",
                       style: TextStyle(
-                        color: Color(0xFFB8860B),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
+                          color: Color(0xFFB8860B),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14),
                     ),
                   ),
                 ] else ...[
-                  // Applicant avatars
                   if (acceptedBy.isNotEmpty)
                     _ApplicantAvatarStack(applicantIds: acceptedBy),
                   if (acceptedBy.isEmpty)
                     Text(
                       "Awaiting more quotes...",
                       style: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        color: Colors.grey.shade500,
-                        fontSize: 13,
-                      ),
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey.shade500,
+                          fontSize: 13),
                     ),
                   const Spacer(),
                   if (acceptedBy.isNotEmpty)
@@ -350,16 +404,13 @@ class _PostedJobCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 10),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: () {
-                        _showApplicantsSheet(context, acceptedBy);
-                      },
-                      child: const Text(
-                        "View Applicants",
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      onPressed: () =>
+                          _showApplicantsSheet(context, acceptedBy),
+                      child: const Text("View Applicants",
+                          style:
+                              TextStyle(fontWeight: FontWeight.bold)),
                     )
                   else
                     OutlinedButton(
@@ -369,16 +420,12 @@ class _PostedJobCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 10),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: () {
-                        // Navigate to edit job (implement as needed)
-                      },
-                      child: const Text(
-                        "Edit Post",
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
+                      onPressed: () {},
+                      child: const Text("Edit Post",
+                          style:
+                              TextStyle(fontWeight: FontWeight.w600)),
                     ),
                 ],
               ],
@@ -389,15 +436,14 @@ class _PostedJobCard extends StatelessWidget {
     );
   }
 
-  void _showApplicantsSheet(
-      BuildContext context, List applicantIds) {
+  void _showApplicantsSheet(BuildContext context, List applicantIds) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => _ApplicantsBottomSheet(applicantIds: applicantIds),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) =>
+          _ApplicantsBottomSheet(applicantIds: applicantIds),
     );
   }
 
@@ -416,7 +462,8 @@ class _PostedJobCard extends StatelessWidget {
 
   String _monthName(int month) {
     const months = [
-      "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "",
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
     ];
     return months[month];
@@ -424,7 +471,159 @@ class _PostedJobCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-// Applicant avatar stack widget
+// Applied Job Card (unchanged)
+// ─────────────────────────────────────────────────────────
+class _AppliedJobCard extends StatelessWidget {
+  final Map<String, dynamic> job;
+  final String userId;
+  const _AppliedJobCard({required this.job, required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    final String title = job["title"] ?? "No Title";
+    final String location = job["location"] ?? "No Location";
+    final String status =
+        (job["status"] ?? "active").toString().toUpperCase();
+    final bool isCompleted = status == "COMPLETED";
+    final dynamic dateValue = job["date"];
+    String formattedDate = "";
+    if (dateValue != null) {
+      if (dateValue is Timestamp) {
+        final d = dateValue.toDate();
+        formattedDate = "${_monthName(d.month)} ${d.day}, ${d.year}";
+      } else if (dateValue is String) {
+        formattedDate = dateValue;
+      }
+    }
+    final String postedBy = job["postedBy"] ?? "";
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+          color: Colors.white, borderRadius: BorderRadius.circular(18)),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F0E8),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                isCompleted ? "COMPLETED" : "APPLIED",
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                  color: isCompleted
+                      ? Colors.grey.shade600
+                      : const Color(0xFFB8860B),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.location_on_outlined,
+                    size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(location,
+                      style: const TextStyle(
+                          fontSize: 14, color: Colors.black87),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (formattedDate.isNotEmpty)
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined,
+                      size: 15, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(formattedDate,
+                      style: const TextStyle(
+                          fontSize: 14, color: Colors.black87)),
+                ],
+              ),
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                if (postedBy.isNotEmpty)
+                  _EmployerProfileRow(
+                    employerId: postedBy,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            WorkerProfileScreen(userId: postedBy),
+                      ),
+                    ),
+                  ),
+                const Spacer(),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFB544),
+                    foregroundColor: Colors.black,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    final jobForDetails = {
+                      ...job,
+                      "date": job["date"] is Timestamp
+                          ? (job["date"] as Timestamp)
+                              .toDate()
+                              .toLocal()
+                              .toString()
+                              .split(' ')[0]
+                          : (job["date"] ?? ""),
+                    };
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            JobDetailsScreen(job: jobForDetails),
+                      ),
+                    );
+                  },
+                  child: const Text("View Details",
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _monthName(int month) {
+    const months = [
+      "",
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
+    return months[month];
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Applicant avatar stack (unchanged)
 // ─────────────────────────────────────────────────────────
 class _ApplicantAvatarStack extends StatelessWidget {
   final List applicantIds;
@@ -432,7 +631,8 @@ class _ApplicantAvatarStack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayCount = applicantIds.length > 3 ? 3 : applicantIds.length;
+    final displayCount =
+        applicantIds.length > 3 ? 3 : applicantIds.length;
     final extra = applicantIds.length - displayCount;
 
     return SizedBox(
@@ -443,7 +643,8 @@ class _ApplicantAvatarStack extends StatelessWidget {
           ...List.generate(displayCount, (i) {
             return Positioned(
               left: i * 24.0,
-              child: _UserAvatar(userId: applicantIds[i].toString(), size: 36),
+              child: _UserAvatar(
+                  userId: applicantIds[i].toString(), size: 36),
             );
           }),
           if (extra > 0)
@@ -461,10 +662,9 @@ class _ApplicantAvatarStack extends StatelessWidget {
                   child: Text(
                     "+$extra",
                     style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
                   ),
                 ),
               ),
@@ -476,7 +676,7 @@ class _ApplicantAvatarStack extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-// Single user avatar from Firestore
+// User avatar (unchanged)
 // ─────────────────────────────────────────────────────────
 class _UserAvatar extends StatelessWidget {
   final String userId;
@@ -486,7 +686,10 @@ class _UserAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection("users").doc(userId).get(),
+      future: FirebaseFirestore.instance
+          .collection("users")
+          .doc(userId)
+          .get(),
       builder: (context, snap) {
         String? photoUrl;
         if (snap.hasData && snap.data!.exists) {
@@ -505,7 +708,8 @@ class _UserAvatar extends StatelessWidget {
                 ? Image.network(photoUrl, fit: BoxFit.cover)
                 : Container(
                     color: Colors.grey.shade300,
-                    child: const Icon(Icons.person, color: Colors.white),
+                    child:
+                        const Icon(Icons.person, color: Colors.white),
                   ),
           ),
         );
@@ -515,7 +719,7 @@ class _UserAvatar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-// Applicants bottom sheet
+// Applicants bottom sheet (unchanged)
 // ─────────────────────────────────────────────────────────
 class _ApplicantsBottomSheet extends StatelessWidget {
   final List applicantIds;
@@ -531,16 +735,13 @@ class _ApplicantsBottomSheet extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text(
-                "Applicants",
-                style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              const Text("Applicants",
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              ),
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context)),
             ],
           ),
           const SizedBox(height: 10),
@@ -563,6 +764,9 @@ class _ApplicantsBottomSheet extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// Applicant tile (unchanged)
+// ─────────────────────────────────────────────────────────
 class _ApplicantTile extends StatelessWidget {
   final String userId;
   final VoidCallback onTap;
@@ -571,7 +775,10 @@ class _ApplicantTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection("users").doc(userId).get(),
+      future: FirebaseFirestore.instance
+          .collection("users")
+          .doc(userId)
+          .get(),
       builder: (context, snap) {
         if (!snap.hasData) {
           return const ListTile(
@@ -579,8 +786,10 @@ class _ApplicantTile extends StatelessWidget {
             title: Text("Loading..."),
           );
         }
-        final data = snap.data!.data() as Map<String, dynamic>? ?? {};
-        final name = data["name"] ?? data["displayName"] ?? "Unknown";
+        final data =
+            snap.data!.data() as Map<String, dynamic>? ?? {};
+        final name =
+            data["name"] ?? data["displayName"] ?? "Unknown";
         final photoUrl = data["profileImageUrl"] as String?;
 
         return ListTile(
@@ -590,18 +799,17 @@ class _ApplicantTile extends StatelessWidget {
             child: CircleAvatar(
               radius: 22,
               backgroundColor: Colors.grey.shade200,
-              backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
-                  ? NetworkImage(photoUrl)
-                  : null,
+              backgroundImage:
+                  (photoUrl != null && photoUrl.isNotEmpty)
+                      ? NetworkImage(photoUrl)
+                      : null,
               child: (photoUrl == null || photoUrl.isEmpty)
                   ? const Icon(Icons.person, color: Colors.grey)
                   : null,
             ),
           ),
-          title: Text(
-            name,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
+          title: Text(name,
+              style: const TextStyle(fontWeight: FontWeight.w600)),
           trailing: const Icon(Icons.arrow_forward_ios,
               size: 14, color: Colors.grey),
           onTap: onTap,
@@ -612,226 +820,7 @@ class _ApplicantTile extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-// Tab 2 — Applied Jobs
-// ─────────────────────────────────────────────────────────
-class _AppliedJobsTab extends StatelessWidget {
-  final String userId;
-  const _AppliedJobsTab({required this.userId});
-
-  @override
-  Widget build(BuildContext context) {
-    // Applied jobs are stored as applications sub-collection or
-    // as jobs where acceptedBy contains userId
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection("jobs")
-          .where("acceptedBy", arrayContains: userId)
-          .orderBy("createdAt", descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-              child: CircularProgressIndicator(color: Color(0xFFFFB544)));
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return _emptyState(
-            icon: Icons.assignment_outlined,
-            message: "You haven't applied to any jobs yet.",
-          );
-        }
-
-        final docs = snapshot.data!.docs;
-
-        return ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            return _AppliedJobCard(job: data, userId: userId);
-          },
-        );
-      },
-    );
-  }
-}
-
-class _AppliedJobCard extends StatelessWidget {
-  final Map<String, dynamic> job;
-  final String userId;
-  const _AppliedJobCard({required this.job, required this.userId});
-
-  @override
-  Widget build(BuildContext context) {
-    final String title = job["title"] ?? "No Title";
-    final String location = job["location"] ?? "No Location";
-    final String status =
-        (job["status"] ?? "active").toString().toUpperCase();
-    final bool isCompleted = status == "COMPLETED";
-    final dynamic dateValue = job["date"];
-    String formattedDate = "";
-    if (dateValue != null) {
-      if (dateValue is Timestamp) {
-        final d = dateValue.toDate();
-        formattedDate =
-            "${_monthName(d.month)} ${d.day}, ${d.year}";
-      } else if (dateValue is String) {
-        formattedDate = dateValue;
-      }
-    }
-
-    // The employer who posted the job
-    final String postedBy = job["postedBy"] ?? "";
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Status badge
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F0E8),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                isCompleted ? "COMPLETED" : "APPLIED",
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                  color: isCompleted
-                      ? Colors.grey.shade600
-                      : const Color(0xFFB8860B),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Title
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            // Location
-            Row(
-              children: [
-                const Icon(Icons.location_on_outlined,
-                    size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    location,
-                    style: const TextStyle(
-                        fontSize: 14, color: Colors.black87),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-
-            if (formattedDate.isNotEmpty)
-              Row(
-                children: [
-                  const Icon(Icons.calendar_today_outlined,
-                      size: 15, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text(
-                    formattedDate,
-                    style: const TextStyle(
-                        fontSize: 14, color: Colors.black87),
-                  ),
-                ],
-              ),
-
-            const SizedBox(height: 14),
-            const Divider(height: 1),
-            const SizedBox(height: 14),
-
-            // Employer profile row (tappable)
-            Row(
-              children: [
-                if (postedBy.isNotEmpty)
-                  _EmployerProfileRow(
-                    employerId: postedBy,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              WorkerProfileScreen(userId: postedBy),
-                        ),
-                      );
-                    },
-                  ),
-                const Spacer(),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFB544),
-                    foregroundColor: Colors.black,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () {
-                    final jobForDetails = {
-                      ...job,
-                      "date": job["date"] is Timestamp
-                          ? (job["date"] as Timestamp)
-                              .toDate()
-                              .toLocal()
-                              .toString()
-                              .split(' ')[0]
-                          : (job["date"] ?? ""),
-                    };
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            JobDetailsScreen(job: jobForDetails),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    "View Details",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _monthName(int month) {
-    const months = [
-      "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-    ];
-    return months[month];
-  }
-}
-
-// ─────────────────────────────────────────────────────────
-// Employer profile row inside Applied Job card
+// Employer profile row (unchanged)
 // ─────────────────────────────────────────────────────────
 class _EmployerProfileRow extends StatelessWidget {
   final String employerId;
@@ -855,8 +844,10 @@ class _EmployerProfileRow extends StatelessWidget {
                 strokeWidth: 2, color: Color(0xFFFFB544)),
           );
         }
-        final data = snap.data!.data() as Map<String, dynamic>? ?? {};
-        final name = data["name"] ?? data["displayName"] ?? "Employer";
+        final data =
+            snap.data!.data() as Map<String, dynamic>? ?? {};
+        final name =
+            data["name"] ?? data["displayName"] ?? "Employer";
         final photoUrl = data["profileImageUrl"] as String?;
 
         return GestureDetector(
@@ -866,29 +857,25 @@ class _EmployerProfileRow extends StatelessWidget {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: Colors.grey.shade200,
-                backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
-                    ? NetworkImage(photoUrl)
-                    : null,
+                backgroundImage:
+                    (photoUrl != null && photoUrl.isNotEmpty)
+                        ? NetworkImage(photoUrl)
+                        : null,
                 child: (photoUrl == null || photoUrl.isEmpty)
-                    ? const Icon(Icons.person, color: Colors.grey, size: 20)
+                    ? const Icon(Icons.person,
+                        color: Colors.grey, size: 20)
                     : null,
               ),
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "Posted by",
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey),
-                  ),
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  const Text("Posted by",
+                      style:
+                          TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(name,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600)),
                 ],
               ),
             ],
@@ -900,7 +887,7 @@ class _EmployerProfileRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-// Shared empty state
+// Shared empty state (unchanged)
 // ─────────────────────────────────────────────────────────
 Widget _emptyState({required IconData icon, required String message}) {
   return Center(
@@ -911,7 +898,8 @@ Widget _emptyState({required IconData icon, required String message}) {
         const SizedBox(height: 16),
         Text(
           message,
-          style: TextStyle(fontSize: 15, color: Colors.grey.shade500),
+          style:
+              TextStyle(fontSize: 15, color: Colors.grey.shade500),
           textAlign: TextAlign.center,
         ),
       ],
