@@ -13,7 +13,6 @@ class MessageScreen extends StatefulWidget {
   final String otherUserId;
   final String userName;
   final String? userProfileImage;
-  // ✅ NEW — true when receiver hasn't accepted yet
   final bool isRequest;
 
   const MessageScreen({
@@ -22,7 +21,7 @@ class MessageScreen extends StatefulWidget {
     required this.otherUserId,
     required this.userName,
     this.userProfileImage,
-    this.isRequest = false, // defaults false — no breaking change
+    this.isRequest = false,
   });
 
   @override
@@ -42,13 +41,11 @@ class _MessageScreenState extends State<MessageScreen> {
   @override
   void initState() {
     super.initState();
-    // ✅ Only mark read if this is a normal chat, not a request
     if (!widget.isRequest) {
       _chatService.markMessagesAsRead(widget.chatId);
     }
   }
 
-  // ── Send text ──
   void sendMessage() async {
     if (_controller.text.trim().isEmpty) return;
     final text = _controller.text.trim();
@@ -60,7 +57,6 @@ class _MessageScreenState extends State<MessageScreen> {
     );
   }
 
-  // ── Send photo ──
   Future<void> attachPhoto() async {
     final XFile? image =
         await _picker.pickImage(source: ImageSource.gallery);
@@ -88,7 +84,6 @@ class _MessageScreenState extends State<MessageScreen> {
     setState(() => _isSending = false);
   }
 
-  // ── Send document ──
   Future<void> attachDocument() async {
     FilePickerResult? result =
         await FilePicker.platform.pickFiles(type: FileType.any);
@@ -117,7 +112,6 @@ class _MessageScreenState extends State<MessageScreen> {
     setState(() => _isSending = false);
   }
 
-  // ── Send location ──
   Future<void> sendLocation() async {
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -138,7 +132,6 @@ class _MessageScreenState extends State<MessageScreen> {
     );
   }
 
-  // ── Clear chat ──
   Future<void> clearChat() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -168,7 +161,6 @@ class _MessageScreenState extends State<MessageScreen> {
     }
   }
 
-  // ── Selection ──
   void onMessageLongPress(MessageModel msg) {
     if (msg.senderId != _chatService.currentUserId) return;
     setState(() => _selectedMessageIds.add(msg.id));
@@ -215,7 +207,6 @@ class _MessageScreenState extends State<MessageScreen> {
     }
   }
 
-  // ── Report ──
   Future<void> showReportDialog() async {
     String? selectedReason;
     final detailController = TextEditingController();
@@ -283,7 +274,6 @@ class _MessageScreenState extends State<MessageScreen> {
     );
   }
 
-  // ── Menu actions ──
   void handleTopMenuAction(String value) async {
     if (value == "view_profile") {
       Navigator.push(
@@ -303,10 +293,8 @@ class _MessageScreenState extends State<MessageScreen> {
     }
   }
 
-  // ── Message bubble ──
   Widget _buildMessageContent(MessageModel msg, bool isMe) {
 
-    // Photo
     if (msg.type == 'image' && msg.fileUrl != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,7 +334,6 @@ class _MessageScreenState extends State<MessageScreen> {
       );
     }
 
-    // Document
     if (msg.type == 'document' && msg.fileUrl != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -380,7 +367,6 @@ class _MessageScreenState extends State<MessageScreen> {
       );
     }
 
-    // Location
     if (msg.type == 'location' && msg.fileUrl != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,7 +409,6 @@ class _MessageScreenState extends State<MessageScreen> {
       );
     }
 
-    // Text
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -433,8 +418,11 @@ class _MessageScreenState extends State<MessageScreen> {
     );
   }
 
-  // ── Time row ──
-  // ✅ Read receipts disabled for requests
+  // ── Time + read receipt row ────────────────────────────
+  // ✅ Single tick only — no double tick (done_all removed)
+  //    Grey  = sent but not yet read by receiver
+  //    Orange = receiver has read the message
+  //    No tick shown for request chats (isRequest = true)
   Widget _timeRow(MessageModel msg, bool isMe) {
     return Padding(
       padding: const EdgeInsets.only(top: 6),
@@ -446,20 +434,23 @@ class _MessageScreenState extends State<MessageScreen> {
             style: const TextStyle(
                 fontSize: 11, color: Colors.grey),
           ),
-          const SizedBox(width: 4),
-          // ✅ No read receipt ticks for request chats
-          if (isMe && !widget.isRequest)
-            Icon(Icons.done_all,
-                size: 16,
-                color: msg.isRead
-                    ? Colors.orange
-                    : Colors.grey),
+          // ✅ Only show for my outgoing messages in accepted chats
+          if (isMe && !widget.isRequest) ...[
+            const SizedBox(width: 4),
+            Icon(
+              Icons.done, // ✅ Single tick — done_all removed
+              size: 16,
+              color: msg.isRead
+                  ? Colors.orange  // receiver has read it
+                  : Colors.grey,   // sent, not yet read
+            ),
+          ],
         ],
       ),
     );
   }
 
-  // ── Accept/Decline bar — shown instead of input for requests ──
+  // ── Accept/Decline bar ────────────────────────────────
   Widget _buildRequestBar() {
     return Container(
       padding: EdgeInsets.only(
@@ -509,17 +500,16 @@ class _MessageScreenState extends State<MessageScreen> {
 
               const SizedBox(width: 12),
 
-              // Accept
+              // Accept — immediately replaces screen with full chat
+              // No confirmation dialog; the request bar itself is the decision UI
               Expanded(
                 child: GestureDetector(
                   onTap: () async {
                     await _chatService
                         .acceptChatRequest(widget.chatId);
-                    // ✅ Mark messages read now that accepted
                     await _chatService
                         .markMessagesAsRead(widget.chatId);
                     if (mounted) {
-                      // ✅ Replace screen with normal chat
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(
@@ -558,7 +548,6 @@ class _MessageScreenState extends State<MessageScreen> {
     );
   }
 
-  // ── Normal input bar ──
   Widget _buildInputBar() {
     return Container(
       padding: EdgeInsets.only(
@@ -658,7 +647,6 @@ class _MessageScreenState extends State<MessageScreen> {
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 12),
-              // ✅ Slightly different color for request mode
               color: widget.isRequest
                   ? const Color(0xFFEDE8F5)
                   : const Color(0xFFECE6D8),
@@ -722,7 +710,6 @@ class _MessageScreenState extends State<MessageScreen> {
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600),
                               ),
-                              // ✅ Request label under name
                               if (widget.isRequest)
                                 const Text(
                                   "Message Request",
@@ -733,7 +720,6 @@ class _MessageScreenState extends State<MessageScreen> {
                             ],
                           ),
                         ),
-                        // ✅ No menu for requests
                         if (!widget.isRequest)
                           PopupMenuButton<String>(
                             onSelected: handleTopMenuAction,
@@ -757,7 +743,6 @@ class _MessageScreenState extends State<MessageScreen> {
                     ),
             ),
 
-            // ── Sending indicator ──
             if (_isSending)
               Container(
                 width: double.infinity,
@@ -862,7 +847,6 @@ class _MessageScreenState extends State<MessageScreen> {
               ),
             ),
 
-            // ── Input bar OR Accept/Decline ──
             widget.isRequest
                 ? _buildRequestBar()
                 : _buildInputBar(),
@@ -873,7 +857,6 @@ class _MessageScreenState extends State<MessageScreen> {
   }
 }
 
-// ── Full screen image viewer ──
 class _FullScreenImage extends StatelessWidget {
   final String url;
   const _FullScreenImage({required this.url});

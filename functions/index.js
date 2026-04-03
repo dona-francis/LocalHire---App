@@ -36,7 +36,13 @@ async function sendNotification({
     await messaging.send({
       token,
       notification: { title, body },
-      data: { type, ...data },
+      // All keys in FCM data payload must be strings
+      data: {
+        type,
+        ...Object.fromEntries(
+          Object.entries(data || {}).map(([k, v]) => [k, String(v)])
+        ),
+      },
       android: {
         priority: priority === "high" ? "high" : "normal",
         notification: {
@@ -55,6 +61,7 @@ async function sendNotification({
 
 // ═══════════════════════════════════════════════
 // TRIGGER 1 — New Message Request
+// Receiver gets notified when someone initiates a chat
 // ═══════════════════════════════════════════════
 exports.onMessageRequest = onDocumentCreated(
   "chats/{chatId}",
@@ -69,7 +76,8 @@ exports.onMessageRequest = onDocumentCreated(
     const receiverId = participants.find((id) => id !== senderId);
     if (!receiverId) return;
 
-    const senderName = chat.displayNames?.[senderId] || "Someone";
+    const senderName = chat.displayNames?.[receiverId] || "Someone";
+    const chatId = event.params.chatId;
 
     await sendNotification({
       toUserId: receiverId,
@@ -80,7 +88,8 @@ exports.onMessageRequest = onDocumentCreated(
       data: {
         senderId,
         senderName,
-        chatId: event.params.chatId,
+        chatId,                    // ✅ needed for direct navigation
+        otherUserId: senderId,     // ✅ alias for Flutter nav
       },
     });
   }
@@ -88,6 +97,7 @@ exports.onMessageRequest = onDocumentCreated(
 
 // ═══════════════════════════════════════════════
 // TRIGGER 2 — Request Accepted
+// Original sender gets notified when receiver accepts
 // ═══════════════════════════════════════════════
 exports.onRequestAccepted = onDocumentUpdated(
   "chats/{chatId}",
@@ -98,6 +108,7 @@ exports.onRequestAccepted = onDocumentUpdated(
     const acceptedBefore = before.acceptedBy || [];
     const acceptedAfter = after.acceptedBy || [];
 
+    // Only fire when acceptedBy gains a new entry
     if (acceptedAfter.length <= acceptedBefore.length) return;
 
     const acceptorId = acceptedAfter.find(
@@ -105,10 +116,13 @@ exports.onRequestAccepted = onDocumentUpdated(
     );
     if (!acceptorId) return;
 
+    // sourceId is the original sender who initiated the chat
     const senderId = after.sourceId;
     if (!senderId || senderId === acceptorId) return;
 
-    const acceptorName = after.displayNames?.[acceptorId] || "Someone";
+    // The acceptor's name as seen by the sender
+    const acceptorName = after.displayNames?.[senderId] || "Someone";
+    const chatId = event.params.chatId;
 
     await sendNotification({
       toUserId: senderId,
@@ -119,7 +133,8 @@ exports.onRequestAccepted = onDocumentUpdated(
       data: {
         acceptedBy: acceptorId,
         acceptedByName: acceptorName,
-        chatId: event.params.chatId,
+        chatId,                    // ✅ needed for direct MessageScreen nav
+        otherUserId: acceptorId,   // ✅ alias for Flutter nav
       },
     });
   }
@@ -128,14 +143,12 @@ exports.onRequestAccepted = onDocumentUpdated(
 // ═══════════════════════════════════════════════
 // TRIGGER 3 — Instant Job Posted
 // Within 50km → HIGH priority
-//  Beyond 50km → NORMAL priority
+// Beyond 50km → NORMAL priority
 // ═══════════════════════════════════════════════
 exports.onInstantJobPosted = onDocumentCreated(
   "jobs/{jobId}",
   async (event) => {
     const job = event.data.data();
-
-    // Only handle instant jobs
     if (!job.isInstantJob) return;
 
     const jobLat = job.locationGeoPoint?.latitude;
@@ -167,7 +180,6 @@ exports.onInstantJobPosted = onDocumentCreated(
         userGeo.latitude, userGeo.longitude,
       );
 
-      // Within 50km → HIGH, beyond 50km → NORMAL
       const isNearby = distance <= 50;
 
       await sendNotification({
@@ -194,15 +206,13 @@ exports.onInstantJobPosted = onDocumentCreated(
 
 // ═══════════════════════════════════════════════
 // TRIGGER 4 — Regular Job Posted
-// Within 80km → NORMAL priority notification
-//  Beyond 80km → No notification
+// Within 80km → NORMAL priority
+// Beyond 80km → No notification
 // ═══════════════════════════════════════════════
 exports.onRegularJobPosted = onDocumentCreated(
   "jobs/{jobId}",
   async (event) => {
     const job = event.data.data();
-
-    // Only handle regular (non-instant) jobs
     if (job.isInstantJob) return;
 
     const jobLat = job.locationGeoPoint?.latitude;
@@ -234,7 +244,6 @@ exports.onRegularJobPosted = onDocumentCreated(
         userGeo.latitude, userGeo.longitude,
       );
 
-      // Only notify users within 80km
       if (distance > 80) return;
 
       await sendNotification({

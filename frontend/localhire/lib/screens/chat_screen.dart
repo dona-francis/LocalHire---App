@@ -5,7 +5,11 @@ import '../models/chat_model.dart';
 import 'message_screen.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  // ✅ initialTab: 0 = All, 1 = Unread, 2 = Requests
+  // Passed from NotificationScreen when tapping a message_request notification
+  final int initialTab;
+
+  const ChatScreen({super.key, this.initialTab = 0});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -14,11 +18,18 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final ChatService _chatService = ChatService();
 
-  int _tabIndex = 0;
+  late int _tabIndex;
   String searchQuery = "";
   final int maxPinned = 3;
   final Set<String> pinnedChats = {};
   List<ChatModel> _lastKnownChats = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Honour initialTab passed from notification navigation
+    _tabIndex = widget.initialTab.clamp(0, 2);
+  }
 
   String getOtherUserId(List<String> participants) {
     final currentUid = _chatService.currentUserId;
@@ -270,8 +281,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 final sorted = _sortChats(displayList);
 
                 return ListView.builder(
-                  key: PageStorageKey(
-                      'chat_list_$_tabIndex'),
+                  key: PageStorageKey('chat_list_$_tabIndex'),
                   itemCount: sorted.length,
                   addAutomaticKeepAlives: true,
                   itemBuilder: (context, index) {
@@ -334,7 +344,6 @@ class _ChatScreenState extends State<ChatScreen> {
 class _ChatItem extends StatefulWidget {
   final ChatModel chat;
   final String otherUserId;
-  //  currentUid passed in — no need to call Auth inside widget
   final String currentUid;
   final bool isPinned;
   final String searchQuery;
@@ -363,7 +372,6 @@ class _ChatItem extends StatefulWidget {
 class _ChatItemState extends State<_ChatItem>
     with AutomaticKeepAliveClientMixin {
 
-  // Static cache keyed by otherUserId
   static final Map<String, Map<String, String?>> _userCache = {};
 
   @override
@@ -382,8 +390,6 @@ class _ChatItemState extends State<_ChatItem>
   @override
   void didUpdateWidget(covariant _ChatItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    //  When displayNames backfill completes on stream,
-    // pick up the new name silently without re-fetching
     final newName = widget.chat.nameFor(widget.currentUid);
     final oldName = oldWidget.chat.nameFor(widget.currentUid);
     if (oldName.isEmpty && newName.isNotEmpty) {
@@ -400,8 +406,6 @@ class _ChatItemState extends State<_ChatItem>
   }
 
   void _resolveUser() {
-    // ── Priority 1: displayNames map on chat doc ──
-    // Each uid sees the OTHER person's name correctly
     final name = widget.chat.nameFor(widget.currentUid);
     final image = widget.chat.imageFor(widget.currentUid);
 
@@ -415,7 +419,6 @@ class _ChatItemState extends State<_ChatItem>
       return;
     }
 
-    // ── Priority 2: in-memory session cache ──
     if (_userCache.containsKey(widget.otherUserId)) {
       final c = _userCache[widget.otherUserId]!;
       _name = c['name'] ?? '';
@@ -423,8 +426,6 @@ class _ChatItemState extends State<_ChatItem>
       return;
     }
 
-    // ── Priority 3: fetch from users + backfill ──
-    // Only hits for old docs missing displayNames
     _name = '';
     _image = null;
     _needsFetch = true;
@@ -434,7 +435,6 @@ class _ChatItemState extends State<_ChatItem>
   Future<void> _fetchAndBackfill() async {
     if (widget.otherUserId.isEmpty) return;
     try {
-      // Fetch the OTHER person's info
       final otherDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.otherUserId)
@@ -445,20 +445,14 @@ class _ChatItemState extends State<_ChatItem>
       final otherImage =
           otherDoc.data()?['profileImage'] as String?;
 
-      // Fetch current user's own info too
-      // so the other person also sees the correct name
       final myDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.currentUid)
           .get();
 
-      final myName =
-          myDoc.data()?['name'] as String? ?? '';
-      final myImage =
-          myDoc.data()?['profileImage'] as String?;
+      final myName = myDoc.data()?['name'] as String? ?? '';
+      final myImage = myDoc.data()?['profileImage'] as String?;
 
-      //  Backfill displayNames for BOTH users
-      // currentUid sees otherName, otherUserId sees myName
       FirebaseFirestore.instance
           .collection('chats')
           .doc(widget.chat.id)
@@ -606,6 +600,7 @@ class _ChatItemState extends State<_ChatItem>
                           !widget.isRequest)
                         const Icon(Icons.push_pin,
                             size: 14, color: Colors.grey),
+                      // ✅ Unread bubble — shows count of unread messages
                       if (widget.unreadCount > 0 &&
                           !widget.isRequest)
                         Container(

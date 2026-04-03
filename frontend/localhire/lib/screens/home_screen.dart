@@ -27,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double userLat = 0;
   double userLng = 0;
   double minPrice = 5;
-  double maxPrice = 500000;
+  double maxPrice = 50000;
   double distance = 100;
   String selectedMode = "All";
 
@@ -466,7 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   RangeSlider(
                     min: 5,
-                    max: 500000,
+                    max: 50000,
                     activeColor: const Color(0xFFFFB544),
                     values: RangeValues(minPrice, maxPrice),
                     onChanged: (values) {
@@ -485,7 +485,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             setModalState(() {
                               selectedMode = "All";
                               minPrice = 5;
-                              maxPrice = 500000;
+                              maxPrice = 50000;
                               distance = 100;
                             });
                           },

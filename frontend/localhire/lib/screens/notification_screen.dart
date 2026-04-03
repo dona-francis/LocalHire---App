@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// ── Update these imports to match your project structure ──
 import 'job_details_screen.dart';
 import 'chat_screen.dart';
+import 'message_screen.dart';
 
 class NotificationScreen extends StatelessWidget {
   final String userId;
@@ -60,31 +60,28 @@ class NotificationScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.symmetric(vertical: 16),
             children: [
-              // ── IMPORTANT SECTION ──
               if (highPriority.isNotEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text("Important",
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 10),
                 ...highPriority.map((doc) =>
                     _NotificationCard(doc: doc, userId: userId)),
                 const SizedBox(height: 20),
               ],
-
-              // ── GENERAL SECTION ──
               if (normal.isNotEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text("General",
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 10),
-                ...normal
-                    .map((doc) => _NotificationCard(doc: doc, userId: userId)),
+                ...normal.map(
+                    (doc) => _NotificationCard(doc: doc, userId: userId)),
               ],
             ],
           );
@@ -123,7 +120,6 @@ class _NotificationCard extends StatelessWidget {
     return "${diff.inDays}d ago";
   }
 
-  // ── Mark notification as read ──────────────────────────
   Future<void> _markAsRead() async {
     await FirebaseFirestore.instance
         .collection("notifications")
@@ -133,7 +129,6 @@ class _NotificationCard extends StatelessWidget {
         .update({"isRead": true});
   }
 
-  // ── Delete notification from Firestore ─────────────────
   Future<void> _deleteNotification() async {
     await FirebaseFirestore.instance
         .collection("notifications")
@@ -160,14 +155,11 @@ class _NotificationCard extends StatelessWidget {
 
       final jobData = jobDoc.data() as Map<String, dynamic>;
       jobData["id"] = jobDoc.id;
-
       await _markAsRead();
 
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => JobDetailsScreen(job: jobData),
-        ),
+        MaterialPageRoute(builder: (_) => JobDetailsScreen(job: jobData)),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -176,13 +168,49 @@ class _NotificationCard extends StatelessWidget {
     }
   }
 
-  // ── Navigate to ChatScreen (Requests tab) ──────────────
-  Future<void> _navigateToChat(BuildContext context) async {
+  // ── Navigate to MessageScreen directly (request_accepted) ──
+  // Opens the accepted chat immediately so sender can start messaging
+  Future<void> _navigateToMessage(
+    BuildContext context, {
+    required String chatId,
+    required String otherUserId,
+    required String otherUserName,
+  }) async {
+    await _markAsRead();
+
+    // Fetch the other person's profile image for the chat header
+    String? profileImage;
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(otherUserId)
+          .get();
+      profileImage = userDoc.data()?["profileImage"] as String?;
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MessageScreen(
+          chatId: chatId,
+          otherUserId: otherUserId,
+          userName: otherUserName,
+          userProfileImage: profileImage,
+          isRequest: false, // accepted — full chat mode
+        ),
+      ),
+    );
+  }
+
+  // ── Navigate to ChatScreen → Requests tab (message_request) ──
+  Future<void> _navigateToChatRequests(BuildContext context) async {
     await _markAsRead();
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const ChatScreen(),
+        builder: (_) => const ChatScreen(initialTab: 2),
       ),
     );
   }
@@ -196,12 +224,23 @@ class _NotificationCard extends StatelessWidget {
     final String subtitle = data["subtitle"] ?? "";
     final bool isRead = data["isRead"] ?? false;
     final Timestamp? createdAt = data["createdAt"];
-    final String jobId = (data["data"] ?? {})["jobId"] ?? "";
 
-    // Determine which action buttons to show
+    final Map<String, dynamic> extraData =
+        (data["data"] as Map<String, dynamic>?) ?? {};
+    final String jobId = extraData["jobId"] ?? "";
+    final String chatId = extraData["chatId"] ?? "";
+    final String otherUserId = extraData["otherUserId"] ?? "";
+    final String otherUserName =
+        extraData["acceptedByName"] ?? extraData["senderName"] ?? "";
+
     final bool isJobNotification =
         type == "instant_job" || type == "job_posted";
     final bool isMessageRequest = type == "message_request";
+    final bool isRequestAccepted = type == "request_accepted";
+
+    // Show action buttons for job, message_request, and request_accepted
+    final bool hasActions =
+        isJobNotification || isMessageRequest || isRequestAccepted;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -224,7 +263,7 @@ class _NotificationCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Top row: icon + text + time ──────────────
+            // ── Top row: icon + text + time ──
             Row(
               children: [
                 CircleAvatar(
@@ -271,19 +310,16 @@ class _NotificationCard extends StatelessWidget {
               ],
             ),
 
-            // ── Action buttons ────────────────────────────
-            if (isJobNotification || isMessageRequest) ...[
+            // ── Action buttons ──
+            if (hasActions) ...[
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // Cancel button — message request only
-                  // Tapping deletes from Firestore + removes from UI
+                  // Cancel — message_request only (dismisses the request)
                   if (isMessageRequest)
                     TextButton(
-                      onPressed: () async {
-                        await _deleteNotification();
-                      },
+                      onPressed: () async => await _deleteNotification(),
                       style: TextButton.styleFrom(
                         foregroundColor:
                             isHigh ? Colors.white70 : Colors.grey[600],
@@ -298,22 +334,30 @@ class _NotificationCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      child: const Text(
-                        "Cancel",
-                        style: TextStyle(fontSize: 13),
-                      ),
+                      child: const Text("Cancel",
+                          style: TextStyle(fontSize: 13)),
                     ),
 
                   if (isMessageRequest) const SizedBox(width: 8),
 
-                  // View / View Details button
-                  // message_request → ChatScreen (requests tab auto-opens)
-                  // instant_job / job_posted → JobDetailsScreen
+                  // Primary action button — label & destination differ by type
                   ElevatedButton(
                     onPressed: () async {
                       if (isMessageRequest) {
-                        await _navigateToChat(context);
+                        // → ChatScreen, Requests tab (receiver reviews the request)
+                        await _navigateToChatRequests(context);
+                      } else if (isRequestAccepted &&
+                          chatId.isNotEmpty &&
+                          otherUserId.isNotEmpty) {
+                        // → MessageScreen directly (sender opens accepted chat)
+                        await _navigateToMessage(
+                          context,
+                          chatId: chatId,
+                          otherUserId: otherUserId,
+                          otherUserName: otherUserName,
+                        );
                       } else if (isJobNotification && jobId.isNotEmpty) {
+                        // → JobDetailsScreen
                         await _navigateToJob(context, jobId);
                       }
                     },
@@ -330,7 +374,11 @@ class _NotificationCard extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      isMessageRequest ? "View" : "View Details",
+                      isMessageRequest
+                          ? "View Request"
+                          : isRequestAccepted
+                              ? "Open Chat"
+                              : "View Details",
                       style: const TextStyle(
                           fontSize: 13, fontWeight: FontWeight.bold),
                     ),
