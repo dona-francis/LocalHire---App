@@ -338,7 +338,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           subtitle: prediction['secondary_text'] != ''
                               ? Text(
                                   prediction['secondary_text'],
-                                  style: const TextStyle(
+                                   style: const TextStyle(
                                       fontSize: 12, color: Colors.grey),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,

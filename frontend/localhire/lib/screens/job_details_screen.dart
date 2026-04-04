@@ -5,11 +5,19 @@ import 'worker_profile_screen.dart';
 
 class JobDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> job;
+  final String? currentUserId; // pass the logged-in user's ID
 
-  const JobDetailsScreen({super.key, required this.job});
+  const JobDetailsScreen({
+    super.key,
+    required this.job,
+    this.currentUserId,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final String jobId = job["jobId"] ?? job["id"] ?? "";
+    final String employerId = job["postedBy"] ?? "";
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Job Details"),
@@ -20,16 +28,13 @@ class JobDetailsScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF5F5F5),
       body: Column(
         children: [
-
-          /// Scrollable content
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
-                  /// JOB TITLE
+                  // JOB TITLE
                   Text(
                     job["title"] ?? "No Title",
                     style: const TextStyle(
@@ -40,36 +45,32 @@ class JobDetailsScreen extends StatelessWidget {
 
                   const SizedBox(height: 15),
 
-                  /// ---------------- POSTED BY SECTION ----------------
+                  // POSTED BY
                   FutureBuilder<DocumentSnapshot>(
                     future: FirebaseFirestore.instance
                         .collection("users")
-                        .doc(job["postedBy"])
+                        .doc(employerId)
                         .get(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
+                        return const Center(child: CircularProgressIndicator());
                       }
 
-                      var user = snapshot.data!.data() as Map<String, dynamic>;
-
-                      String name = user["name"] ?? "User";
-                      String image = user["profileImage"] ??
-                          "https://i.pravatar.cc/150?img=5";
+                      final user =
+                          snapshot.data!.data() as Map<String, dynamic>;
+                      final name = user["name"] ?? "User";
+                      final image = user["profileImageUrl"] ??
+                          user["profileImage"] ??
+                          "";
 
                       return GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => WorkerProfileScreen(
-                                userId: job["postedBy"],
-                              ),
-                            ),
-                          );
-                        },
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                WorkerProfileScreen(userId: employerId),
+                          ),
+                        ),
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -78,39 +79,33 @@ class JobDetailsScreen extends StatelessWidget {
                           ),
                           child: Row(
                             children: [
-
-                              /// Profile Picture
                               CircleAvatar(
                                 radius: 25,
-                                backgroundImage: NetworkImage(image),
+                                backgroundColor: Colors.grey.shade200,
+                                backgroundImage: image.isNotEmpty
+                                    ? NetworkImage(image)
+                                    : null,
+                                child: image.isEmpty
+                                    ? const Icon(Icons.person,
+                                        color: Colors.grey)
+                                    : null,
                               ),
-
                               const SizedBox(width: 15),
-
-                              /// Name Section
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    "POSTED BY",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
+                                  const Text("POSTED BY",
+                                      style: TextStyle(
+                                          fontSize: 12, color: Colors.grey)),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    name,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                  Text(name,
+                                      style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold)),
                                 ],
                               ),
-
                               const Spacer(),
-                              const Icon(Icons.arrow_forward_ios, size: 16)
+                              const Icon(Icons.arrow_forward_ios, size: 16),
                             ],
                           ),
                         ),
@@ -120,67 +115,99 @@ class JobDetailsScreen extends StatelessWidget {
 
                   const SizedBox(height: 15),
 
-                  /// JOB TYPE
                   Text(
                     job["type"] ?? "",
                     style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
-                    ),
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500),
                   ),
 
                   const SizedBox(height: 20),
 
-                  /// CARDS
                   _buildCard("Location", job["location"] ?? "Not specified"),
                   _buildCard("Salary", "₹ ${job["salary"] ?? "0"}"),
                   _buildCard("Date", job["date"] ?? ""),
                   _buildCard(
                     "Posted",
-                    job["createdAt"]!=null && job["createdAt"]is Timestamp
+                    job["createdAt"] != null && job["createdAt"] is Timestamp
                         ? _formatTimestamp(job["createdAt"])
-                        :  "not availale",
+                        : "Not available",
                   ),
-                  _buildCard("Description", job["description"] ?? "Not provided"),
+                  _buildCard(
+                      "Description", job["description"] ?? "Not provided"),
                 ],
               ),
             ),
           ),
 
-          /// APPLY BUTTON
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFB54A),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ApplyScreen(),
+          // APPLY BUTTON — hidden if viewer is the poster
+          if (currentUserId != null && currentUserId != employerId)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFB54A),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
                     ),
-                  );
-                },
-                child: const Text(
-                  "Apply",
-                  style: TextStyle(fontSize: 18),
+                  ),
+                  onPressed: () {
+                    if (jobId.isEmpty || currentUserId!.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text("Unable to apply. Missing job info.")),
+                      );
+                      return;
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ApplyScreen(
+                          jobId: jobId,
+                          workerId: currentUserId!,
+                          employerId: employerId,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text("Apply",
+                      style: TextStyle(fontSize: 18)),
                 ),
               ),
             ),
-          ),
+
+          // If currentUserId is null, still show Apply (fallback, no Firestore write blocked)
+          if (currentUserId == null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFB54A),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text("Please log in to apply.")),
+                    );
+                  },
+                  child: const Text("Apply", style: TextStyle(fontSize: 18)),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  /// ---------------- BUILD CARD ----------------
   Widget _buildCard(String title, String value) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -191,31 +218,21 @@ class JobDetailsScreen extends StatelessWidget {
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.start, // top-align for multi-line
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
+          Text(title,
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(width: 10),
-
-          /// Flexible allows long text (like Description) to wrap without overflow
-          Flexible(
-            child: Text(
-              value,
-              softWrap: true,
-            ),
-          ),
+          Flexible(child: Text(value, softWrap: true)),
         ],
       ),
     );
   }
 
-  /// ---------------- FORMAT TIMESTAMP ----------------
   String _formatTimestamp(Timestamp timestamp) {
     final date = timestamp.toDate();
-    return "${date.day.toString().padLeft(2,'0')}-"
-           "${date.month.toString().padLeft(2,'0')}-"
-           "${date.year}";
+    return "${date.day.toString().padLeft(2, '0')}-"
+        "${date.month.toString().padLeft(2, '0')}-"
+        "${date.year}";
   }
 }
