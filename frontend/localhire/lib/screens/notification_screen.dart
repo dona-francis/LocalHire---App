@@ -40,7 +40,8 @@ class NotificationScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.notifications_none, size: 64, color: Colors.grey),
+                  Icon(Icons.notifications_none,
+                      size: 64, color: Colors.grey),
                   SizedBox(height: 12),
                   Text("No notifications yet",
                       style: TextStyle(color: Colors.grey)),
@@ -58,28 +59,28 @@ class NotificationScreen extends StatelessWidget {
               .toList();
 
           return ListView(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             children: [
               if (highPriority.isNotEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text("Important",
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 ...highPriority.map((doc) =>
                     _NotificationCard(doc: doc, userId: userId)),
-                const SizedBox(height: 20),
               ],
               if (normal.isNotEmpty) ...[
+                const SizedBox(height: 10),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text("General",
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 ...normal.map(
                     (doc) => _NotificationCard(doc: doc, userId: userId)),
               ],
@@ -138,38 +139,49 @@ class _NotificationCard extends StatelessWidget {
         .delete();
   }
 
-  // ── Navigate to JobDetailsScreen ───────────────────────
-  Future<void> _navigateToJob(BuildContext context, String jobId) async {
-    try {
-      final jobDoc = await FirebaseFirestore.instance
-          .collection("jobs")
-          .doc(jobId)
-          .get();
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Cancel notification"),
+        content: const Text("Are you sure you want to remove this?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("No"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Yes"),
+          ),
+        ],
+      ),
+    );
 
-      if (!jobDoc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Job no longer available")),
-        );
-        return;
-      }
-
-      final jobData = jobDoc.data() as Map<String, dynamic>;
-      jobData["id"] = jobDoc.id;
-      await _markAsRead();
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => JobDetailsScreen(job: jobData)),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error loading job: $e")),
-      );
+    if (confirm == true) {
+      await _deleteNotification();
     }
   }
 
-  // ── Navigate to MessageScreen directly (request_accepted) ──
-  // Opens the accepted chat immediately so sender can start messaging
+  Future<void> _navigateToJob(BuildContext context, String jobId) async {
+    final jobDoc = await FirebaseFirestore.instance
+        .collection("jobs")
+        .doc(jobId)
+        .get();
+
+    if (!jobDoc.exists) return;
+
+    final jobData = jobDoc.data() as Map<String, dynamic>;
+    jobData["id"] = jobDoc.id;
+
+    await _markAsRead();
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => JobDetailsScreen(job: jobData)),
+    );
+  }
+
   Future<void> _navigateToMessage(
     BuildContext context, {
     required String chatId,
@@ -178,14 +190,13 @@ class _NotificationCard extends StatelessWidget {
   }) async {
     await _markAsRead();
 
-    // Fetch the other person's profile image for the chat header
     String? profileImage;
     try {
       final userDoc = await FirebaseFirestore.instance
           .collection("users")
           .doc(otherUserId)
           .get();
-      profileImage = userDoc.data()?["profileImage"] as String?;
+      profileImage = userDoc.data()?["profileImage"];
     } catch (_) {}
 
     if (!context.mounted) return;
@@ -198,13 +209,12 @@ class _NotificationCard extends StatelessWidget {
           otherUserId: otherUserId,
           userName: otherUserName,
           userProfileImage: profileImage,
-          isRequest: false, // accepted — full chat mode
+          isRequest: false,
         ),
       ),
     );
   }
 
-  // ── Navigate to ChatScreen → Requests tab (message_request) ──
   Future<void> _navigateToChatRequests(BuildContext context) async {
     await _markAsRead();
     Navigator.push(
@@ -238,154 +248,110 @@ class _NotificationCard extends StatelessWidget {
     final bool isMessageRequest = type == "message_request";
     final bool isRequestAccepted = type == "request_accepted";
 
-    // Show action buttons for job, message_request, and request_accepted
-    final bool hasActions =
-        isJobNotification || isMessageRequest || isRequestAccepted;
-
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12), // smaller card
         decoration: BoxDecoration(
           color: isHigh ? const Color(0xFFF5A623) : Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(14),
           border: !isHigh && !isRead
-              ? Border.all(color: const Color(0xFFF5A623), width: 1.5)
+              ? Border.all(color: const Color(0xFFF5A623), width: 1)
               : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Top row: icon + text + time ──
             Row(
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: isHigh
-                      ? Colors.white.withValues(alpha: 0.25)
-                      : Colors.grey.shade100,
-                  child: Icon(
-                    _iconForType(type),
-                    color: isHigh ? Colors.white : const Color(0xFFF5A623),
-                  ),
+                Icon(
+                  _iconForType(type),
+                  size: 20,
+                  color: isHigh ? Colors.white : const Color(0xFFF5A623),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isHigh ? Colors.white : Colors.black,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isHigh ? Colors.white70 : Colors.grey[700],
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isHigh ? Colors.white : Colors.black,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
                 Text(
                   _timeAgo(createdAt),
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     color: isHigh ? Colors.white70 : Colors.grey,
                   ),
                 ),
               ],
             ),
 
-            // ── Action buttons ──
-            if (hasActions) ...[
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  // Cancel — message_request only (dismisses the request)
-                  if (isMessageRequest)
-                    TextButton(
-                      onPressed: () async => await _deleteNotification(),
-                      style: TextButton.styleFrom(
-                        foregroundColor:
-                            isHigh ? Colors.white70 : Colors.grey[600],
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            color: isHigh
-                                ? Colors.white38
-                                : Colors.grey.shade300,
-                          ),
-                        ),
-                      ),
-                      child: const Text("Cancel",
-                          style: TextStyle(fontSize: 13)),
-                    ),
+            const SizedBox(height: 4),
 
-                  if (isMessageRequest) const SizedBox(width: 8),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: isHigh ? Colors.white70 : Colors.grey[700],
+              ),
+            ),
 
-                  // Primary action button — label & destination differ by type
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (isMessageRequest) {
-                        // → ChatScreen, Requests tab (receiver reviews the request)
-                        await _navigateToChatRequests(context);
-                      } else if (isRequestAccepted &&
-                          chatId.isNotEmpty &&
-                          otherUserId.isNotEmpty) {
-                        // → MessageScreen directly (sender opens accepted chat)
-                        await _navigateToMessage(
-                          context,
-                          chatId: chatId,
-                          otherUserId: otherUserId,
-                          otherUserName: otherUserName,
-                        );
-                      } else if (isJobNotification && jobId.isNotEmpty) {
-                        // → JobDetailsScreen
-                        await _navigateToJob(context, jobId);
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          isHigh ? Colors.white : const Color(0xFFF5A623),
-                      foregroundColor:
-                          isHigh ? const Color(0xFFF5A623) : Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
+            const SizedBox(height: 8),
+
+            // ── Small text actions ──
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (isMessageRequest || isJobNotification)
+                  GestureDetector(
+                    onTap: () => _confirmDelete(context),
                     child: Text(
-                      isMessageRequest
-                          ? "View Request"
-                          : isRequestAccepted
-                              ? "Open Chat"
-                              : "View Details",
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.bold),
+                      "Cancel",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            isHigh ? Colors.white70 : Colors.grey.shade600,
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ],
+
+                const SizedBox(width: 12),
+
+                GestureDetector(
+                  onTap: () async {
+                    if (isMessageRequest) {
+                      await _navigateToChatRequests(context);
+                    } else if (isRequestAccepted) {
+                      await _navigateToMessage(
+                        context,
+                        chatId: chatId,
+                        otherUserId: otherUserId,
+                        otherUserName: otherUserName,
+                      );
+                    } else if (isJobNotification) {
+                      await _navigateToJob(context, jobId);
+                    }
+                  },
+                  child: Text(
+                    isMessageRequest
+                        ? "View"
+                        : isRequestAccepted
+                            ? "Open Chat"
+                            : "View Details",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color:
+                          isHigh ? Colors.white : const Color(0xFFF5A623),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
