@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7),
+      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       body: SafeArea(
         child: Column(
           children: [
@@ -585,7 +585,7 @@ for (var doc in snapshot.data!.docs) {
     margin: const EdgeInsets.only(bottom: 16),
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: Colors.white, 
+      color: const Color.fromARGB(255, 245, 228, 195), 
       borderRadius: BorderRadius.circular(18),
       boxShadow: [
         BoxShadow(
@@ -604,7 +604,7 @@ for (var doc in snapshot.data!.docs) {
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF3E0), // light theme tint
+                color: const Color.fromARGB(255, 255, 247, 232), // light theme tint
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -612,7 +612,7 @@ for (var doc in snapshot.data!.docs) {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color:  const Color(0xFFFFB544),
+                  color:  Color.fromARGB(255, 91, 67, 22),
                 ),
               ),
             ),
@@ -670,7 +670,7 @@ for (var doc in snapshot.data!.docs) {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFB544), // ✅ theme color
-                foregroundColor: Colors.white, // ✅ better contrast
+                foregroundColor: const Color.fromARGB(255, 79, 54, 20), // ✅ better contrast
                 elevation: 0,
               ),
               onPressed: () {
