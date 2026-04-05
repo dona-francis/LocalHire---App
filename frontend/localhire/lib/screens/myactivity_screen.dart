@@ -16,7 +16,7 @@ class _MyActivityScreenState extends State<MyActivityScreen>
   late TabController _tabController;
   int _selectedTab = 0;
 
-  final List<String> _tabs = ["Posted Jobs", "Applied Jobs", "Completed","Requests"];
+  final List<String> _tabs = ["Posted Jobs", "Applied Jobs", "Completed", "Requests"];
 
   @override
   void initState() {
@@ -69,14 +69,11 @@ class _MyActivityScreenState extends State<MyActivityScreen>
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     margin: const EdgeInsets.only(right: 10),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     decoration: BoxDecoration(
                       color: selected ? Colors.white : Colors.transparent,
                       border: Border.all(
-                        color: selected
-                            ? const Color(0xFFFFB544)
-                            : Colors.grey.shade300,
+                        color: selected ? const Color(0xFFFFB544) : Colors.grey.shade300,
                         width: selected ? 2 : 1,
                       ),
                       borderRadius: BorderRadius.circular(25),
@@ -84,8 +81,7 @@ class _MyActivityScreenState extends State<MyActivityScreen>
                     child: Text(
                       _tabs[index],
                       style: TextStyle(
-                        fontWeight:
-                            selected ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                         color: selected ? Colors.black : Colors.grey.shade600,
                         fontSize: 14,
                       ),
@@ -112,10 +108,18 @@ class _MyActivityScreenState extends State<MyActivityScreen>
     );
   }
 }
-// ─────────────────────────────────────────────────────────
-// Tab 4 — Requests (NEW)
-// ─────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────
+// Shared user + job cache (process-level, like chat_screen)
+// ─────────────────────────────────────────────────────────
+class _Cache {
+  static final Map<String, Map<String, dynamic>> users = {};
+  static final Map<String, Map<String, dynamic>> jobs = {};
+}
+
+// ─────────────────────────────────────────────────────────
+// Tab 4 — Requests
+// ─────────────────────────────────────────────────────────
 class _RequestsTab extends StatefulWidget {
   final String userId;
   const _RequestsTab({required this.userId});
@@ -132,187 +136,34 @@ class _RequestsTabState extends State<_RequestsTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection("applications")
           .where("employerId", isEqualTo: widget.userId)
           .where("status", isEqualTo: "pending")
-          .snapshots(), // ✅ NO orderBy (stable)
-
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: CircularProgressIndicator(color: Color(0xFFFFB544)),
           );
         }
-
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return _emptyState(
             icon: Icons.notifications_none,
             message: "No requests at the moment.",
           );
         }
-
         final requests = snapshot.data!.docs;
-
         return ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           itemCount: requests.length,
           itemBuilder: (context, index) {
-            final data =
-                requests[index].data() as Map<String, dynamic>;
-
-            return FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection("jobs")
-                  .doc(data["jobId"])
-                  .get(),
-              builder: (context, jobSnap) {
-                String jobTitle = "Job";
-
-                if (jobSnap.hasData && jobSnap.data!.exists) {
-                  final jobData =
-                      jobSnap.data!.data() as Map<String, dynamic>;
-                  jobTitle = jobData["title"] ?? "Job";
-                }
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 🧾 JOB TITLE
-                        Text(
-                          jobTitle,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        // 👤 WORKER NAME
-                        FutureBuilder<DocumentSnapshot>(
-                          future: FirebaseFirestore.instance
-                              .collection("users")
-                              .doc(data["workerId"])
-                              .get(),
-                          builder: (context, userSnap) {
-                            String name = "Worker";
-
-                            if (userSnap.hasData &&
-                                userSnap.data!.exists) {
-                              final userData = userSnap.data!.data()
-                                  as Map<String, dynamic>;
-                              name = userData["name"] ?? "Worker";
-                            }
-
-                            return Text(
-                              name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        // 💬 ENQUIRY MESSAGE (FIXED)
-                        Text(
-                          (data["question"] ?? "").isNotEmpty
-                              ? data["question"]
-                              : "No message",
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        // 📅 DATE
-                        if ((data["preferredDate"] ?? "").isNotEmpty)
-                          Text("📅 Date: ${data["preferredDate"]}"),
-
-                        // ⏰ TIME
-                        if ((data["preferredTime"] ?? "").isNotEmpty)
-                          Text("⏰ Time: ${data["preferredTime"]}"),
-
-                        // 💰 RATE
-                        if ((data["proposedRate"] ?? "").isNotEmpty)
-                          Text("💰 Rate: ₹${data["proposedRate"]}"),
-
-                        const SizedBox(height: 12),
-
-                        // ✅ ACTION BUTTONS
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                ),
-                                onPressed: () async {
-  final workerId = data["workerId"];
-  final jobId = data["jobId"];
-
-  // 1. Accept this application
-  await FirebaseFirestore.instance
-      .collection("applications")
-      .doc(requests[index].id)
-      .update({"status": "accepted"});
-
-  // 2. Add worker to job
-  await FirebaseFirestore.instance
-      .collection("jobs")
-      .doc(jobId)
-      .update({
-    "acceptedBy": FieldValue.arrayUnion([workerId]),
-    "status": "assigned"
-  });
-
-  // 3. Reject others
-  final otherApps = await FirebaseFirestore.instance
-      .collection("applications")
-      .where("jobId", isEqualTo: jobId)
-      .get();
-
-  for (var doc in otherApps.docs) {
-    if (doc.id != requests[index].id) {
-      await doc.reference.update({"status": "denied"});
-    }
-  }
-},
-                                child: const Text("Accept"),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
-                                onPressed: () async {
-                                  await FirebaseFirestore.instance
-                                      .collection("applications")
-                                      .doc(requests[index].id)
-                                      .update({"status": "denied"});
-                                },
-                                child: const Text("Deny"),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+            final data = requests[index].data() as Map<String, dynamic>;
+            return _RequestCard(
+              key: ValueKey(requests[index].id),
+              appDocId: requests[index].id,
+              appData: data,
             );
           },
         );
@@ -320,7 +171,199 @@ class _RequestsTabState extends State<_RequestsTab>
     );
   }
 }
-  
+
+class _RequestCard extends StatefulWidget {
+  final String appDocId;
+  final Map<String, dynamic> appData;
+  const _RequestCard({super.key, required this.appDocId, required this.appData});
+
+  @override
+  State<_RequestCard> createState() => _RequestCardState();
+}
+
+class _RequestCardState extends State<_RequestCard> {
+  String _jobTitle = "";
+  String _workerName = "";
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final jobId = widget.appData["jobId"] as String? ?? "";
+    final workerId = widget.appData["workerId"] as String? ?? "";
+
+    if (_Cache.jobs.containsKey(jobId)) {
+      _jobTitle = _Cache.jobs[jobId]!["title"] ?? "Job";
+    } else if (jobId.isNotEmpty) {
+      final doc = await FirebaseFirestore.instance.collection("jobs").doc(jobId).get();
+      if (doc.exists) {
+        final d = doc.data() as Map<String, dynamic>;
+        _Cache.jobs[jobId] = d;
+        _jobTitle = d["title"] ?? "Job";
+      }
+    }
+
+    if (_Cache.users.containsKey(workerId)) {
+      _workerName = _Cache.users[workerId]!["name"] ?? "Worker";
+    } else if (workerId.isNotEmpty) {
+      final doc = await FirebaseFirestore.instance.collection("users").doc(workerId).get();
+      if (doc.exists) {
+        final d = doc.data() as Map<String, dynamic>;
+        _Cache.users[workerId] = d;
+        _workerName = d["name"] ?? "Worker";
+      }
+    }
+
+    if (mounted) setState(() => _loaded = true);
+  }
+
+  Future<void> _accept(BuildContext ctx) async {
+    final workerId = widget.appData["workerId"] as String? ?? "";
+    final jobId = widget.appData["jobId"] as String? ?? "";
+
+    await FirebaseFirestore.instance
+        .collection("applications")
+        .doc(widget.appDocId)
+        .update({"status": "accepted"});
+
+    await FirebaseFirestore.instance.collection("jobs").doc(jobId).update({
+      "acceptedBy": FieldValue.arrayUnion([workerId]),
+      "status": "assigned",
+    });
+
+    final others = await FirebaseFirestore.instance
+        .collection("applications")
+        .where("jobId", isEqualTo: jobId)
+        .get();
+    for (final doc in others.docs) {
+      if (doc.id != widget.appDocId) {
+        await doc.reference.update({"status": "denied"});
+      }
+    }
+  }
+
+  Future<void> _deny() async {
+    await FirebaseFirestore.instance
+        .collection("applications")
+        .doc(widget.appDocId)
+        .update({"status": "denied"});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = widget.appData;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 0,
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Job title
+            Text(
+              _loaded ? _jobTitle : (data["jobId"] ?? ""),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+
+            const SizedBox(height: 6),
+
+            // 🔥 UPDATED: Clickable worker name (bigger)
+            GestureDetector(
+              onTap: () {
+                final workerId = widget.appData["workerId"] as String? ?? "";
+                if (workerId.isNotEmpty) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => WorkerProfileScreen(userId: workerId),
+                    ),
+                  );
+                }
+              },
+              child: Text(
+                _loaded ? _workerName : "",
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+
+            if ((data["enquiry"] ?? data["question"] ?? "").toString().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                data["enquiry"] ?? data["question"] ?? "",
+                style: const TextStyle(fontSize: 14),
+              ),
+            ],
+
+            const SizedBox(height: 8),
+
+            if ((data["preferredDate"] ?? "").toString().isNotEmpty)
+              Text("📅  Date: ${data["preferredDate"]}",
+                  style: const TextStyle(fontSize: 13)),
+
+            if ((data["preferredTime"] ?? "").toString().isNotEmpty)
+              Text("⏰  Time: ${data["preferredTime"]}",
+                  style: const TextStyle(fontSize: 13)),
+
+            if ((data["proposedRate"] ?? "").toString().isNotEmpty)
+              Text("💰  Rate: ₹${data["proposedRate"]}",
+                  style: const TextStyle(fontSize: 13)),
+
+            const SizedBox(height: 14),
+
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black87,
+                      side: const BorderSide(color: Color(0xFF4CAF50), width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16), // 🔥 more oval
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () => _accept(context),
+                    child: const Text("Accept",
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black87,
+                      side: BorderSide(color: Colors.red.shade300, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16), // 🔥 more oval
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: _deny,
+                    child: const Text("Deny",
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────
 // Tab 1 & 3 — Posted Jobs
 // ─────────────────────────────────────────────────────────
@@ -362,14 +405,12 @@ class _PostedJobsTabState extends State<_PostedJobsTab>
 
         final docs = _lastKnownDocs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-          final status =
-              (data["status"] ?? "active").toString().toLowerCase();
+          final status = (data["status"] ?? "active").toString().toLowerCase();
           if (widget.showCompleted) return status == "completed";
           return status != "completed";
         }).toList();
 
-        if (docs.isEmpty &&
-            snapshot.connectionState == ConnectionState.active) {
+        if (docs.isEmpty && snapshot.connectionState == ConnectionState.active) {
           return _emptyState(
             icon: widget.showCompleted
                 ? Icons.check_circle_outline
@@ -387,81 +428,9 @@ class _PostedJobsTabState extends State<_PostedJobsTab>
             final data = docs[index].data() as Map<String, dynamic>;
             final docId = docs[index].id;
             return _PostedJobCard(
-                job: data, docId: docId, userId: widget.userId);
-          },
-        );
-      },
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────
-// Tab 2 — Applied Jobs (streams from applications collection)
-// ─────────────────────────────────────────────────────────
-
-class _AppliedJobsTab extends StatefulWidget {
-  final String userId;
-  const _AppliedJobsTab({required this.userId});
-
-  @override
-  State<_AppliedJobsTab> createState() => _AppliedJobsTabState();
-}
-
-class _AppliedJobsTabState extends State<_AppliedJobsTab>
-    with AutomaticKeepAliveClientMixin {
-
-  List<QueryDocumentSnapshot> _lastKnownApplications = [];
-
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection("applications")
-          .where("workerId", isEqualTo: widget.userId)
-          .orderBy("createdAt", descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          _lastKnownApplications = snapshot.data!.docs;
-        }
-
-        final applications = _lastKnownApplications;
-
-        // ✅ Show loader ONLY if nothing cached yet
-        if (applications.isEmpty &&
-            snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(
-              color: Color(0xFFFFB544),
-            ),
-          );
-        }
-        if (applications.isEmpty &&
-            snapshot.connectionState == ConnectionState.active) {
-          return _emptyState(
-            icon: Icons.assignment_outlined,
-            message: "You haven't applied to any jobs yet.",
-          );
-        }
-
-        return ListView.builder(
-          key: const PageStorageKey('applied_jobs_list'), 
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: applications.length,
-          itemBuilder: (context, index) {
-            final appData =
-                applications[index].data() as Map<String, dynamic>;
-            final appId = applications[index].id;
-
-            return _AppliedJobCard(
-              key: ValueKey(appId), 
-              appId: appId,
-              appData: appData,
+              key: ValueKey(docId),
+              job: data,
+              docId: docId,
               userId: widget.userId,
             );
           },
@@ -472,6 +441,75 @@ class _AppliedJobsTabState extends State<_AppliedJobsTab>
 }
 
 // ─────────────────────────────────────────────────────────
+// Tab 2 — Applied Jobs
+// ─────────────────────────────────────────────────────────
+class _AppliedJobsTab extends StatefulWidget {
+  final String userId;
+  const _AppliedJobsTab({required this.userId});
+
+  @override
+  State<_AppliedJobsTab> createState() => _AppliedJobsTabState();
+}
+
+class _AppliedJobsTabState extends State<_AppliedJobsTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  // ── Same pattern as _PostedJobsTab — never wipe the list ──
+  List<QueryDocumentSnapshot> _lastKnownDocs = [];
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection("applications")
+          .where("workerId", isEqualTo: widget.userId)
+          .orderBy("createdAt", descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        // Only update when real data arrives — never reset on waiting/error
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          _lastKnownDocs = snapshot.data!.docs;
+        }
+
+        // Show spinner only on the very first load (no cached docs yet)
+        if (_lastKnownDocs.isEmpty &&
+            snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFFB544)));
+        }
+
+        // Show empty state only when stream is active AND confirmed empty
+        if (_lastKnownDocs.isEmpty &&
+            snapshot.connectionState == ConnectionState.active) {
+          return _emptyState(
+            icon: Icons.assignment_outlined,
+            message: "You haven't applied to any jobs yet.",
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: _lastKnownDocs.length,
+          itemBuilder: (context, index) {
+            final appData =
+                _lastKnownDocs[index].data() as Map<String, dynamic>;
+            final appId = _lastKnownDocs[index].id;
+            return _AppliedJobCard(
+              key: ValueKey(appId),
+              appId: appId,
+              appData: appData,
+              userId: widget.userId,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+// ─────────────────────────────────────────────────────────
 // Posted Job Card
 // ─────────────────────────────────────────────────────────
 class _PostedJobCard extends StatelessWidget {
@@ -480,14 +518,13 @@ class _PostedJobCard extends StatelessWidget {
   final String userId;
 
   const _PostedJobCard(
-      {required this.job, required this.docId, required this.userId});
+      {super.key, required this.job, required this.docId, required this.userId});
 
   @override
   Widget build(BuildContext context) {
     final String title = job["title"] ?? "No Title";
     final String location = job["location"] ?? "No Location";
-    final String status =
-        (job["status"] ?? "active").toString().toUpperCase();
+    final String status = (job["status"] ?? "active").toString().toUpperCase();
     final bool isCompleted = status == "COMPLETED";
     final dynamic dateValue = job["date"];
     String formattedDate = "";
@@ -501,30 +538,22 @@ class _PostedJobCard extends StatelessWidget {
     }
 
     return GestureDetector(
-
-  onTap: () {
-     final acceptedBy = job["acceptedBy"] ?? [];
-     final docId = job["jobId"] ?? "";
-  if (isCompleted) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => JobDetailsScreen(
-          job: {
-            ..._prepareJob(job),
-            "jobId": docId, // needed for details
-          },
-          currentUserId: userId,
-        ),
-      ),
-    );
-  } else {
-    _showApplicantsSheet(context, docId);
-  }
-},
-  
-    
-
+      onTap: () {
+        if (isCompleted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => JobDetailsScreen(
+                job: {
+                  ..._prepareJob(job),
+                  "jobId": docId,
+                },
+                currentUserId: userId,
+              ),
+            ),
+          );
+        } 
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
@@ -537,8 +566,7 @@ class _PostedJobCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF5F0E8),
                   borderRadius: BorderRadius.circular(20),
@@ -557,18 +585,15 @@ class _PostedJobCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(title,
-                  style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               Row(
                 children: [
-                  const Icon(Icons.location_on_outlined,
-                      size: 16, color: Colors.grey),
+                  const Icon(Icons.location_on_outlined, size: 16, color: Colors.grey),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(location,
-                        style: const TextStyle(
-                            fontSize: 14, color: Colors.black87),
+                        style: const TextStyle(fontSize: 14, color: Colors.black87),
                         overflow: TextOverflow.ellipsis),
                   ),
                 ],
@@ -581,8 +606,7 @@ class _PostedJobCard extends StatelessWidget {
                         size: 15, color: Colors.grey),
                     const SizedBox(width: 4),
                     Text(formattedDate,
-                        style: const TextStyle(
-                            fontSize: 14, color: Colors.black87)),
+                        style: const TextStyle(fontSize: 14, color: Colors.black87)),
                   ],
                 ),
               const SizedBox(height: 14),
@@ -591,13 +615,11 @@ class _PostedJobCard extends StatelessWidget {
               if (isCompleted) ...[
                 Row(
                   children: [
-                    const Icon(Icons.star_rounded,
-                        color: Color(0xFFFFB544), size: 22),
+                    const Icon(Icons.star_rounded, color: Color(0xFFFFB544), size: 22),
                     const SizedBox(width: 6),
                     Text(
                       job["review"] ?? "Excellent service!",
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13),
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                     ),
                     const Spacer(),
                     const Text(
@@ -645,56 +667,85 @@ class _PostedJobCard extends StatelessWidget {
 
   String _monthName(int month) {
     const months = [
-      "",
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec"
+      "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
     ];
     return months[month];
   }
 }
 
 // ─────────────────────────────────────────────────────────
-// Live applicant count footer
+// Live applicant count footer — no flicker
+// Keeps last-known count/ids; never resets to 0 on reconnect
 // ─────────────────────────────────────────────────────────
-class _LiveApplicantFooter extends StatelessWidget {
+class _LiveApplicantFooter extends StatefulWidget {
   final String jobDocId;
   const _LiveApplicantFooter({required this.jobDocId});
 
   @override
+  State<_LiveApplicantFooter> createState() => _LiveApplicantFooterState();
+}
+
+class _LiveApplicantFooterState extends State<_LiveApplicantFooter>
+    with AutomaticKeepAliveClientMixin {
+  // ── Class-level cache so count survives tab switches ──
+  static final Map<String, int> _countCache = {};
+  static final Map<String, List<String>> _idsCache = {};
+
+  int _count = 0;
+  List<String> _workerIds = [];
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Seed from cache immediately — zero flicker on rebuild
+    _count = _countCache[widget.jobDocId] ?? 0;
+    _workerIds = _idsCache[widget.jobDocId] ?? [];
+  }
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection("applications")
-          .where("jobId", isEqualTo: jobDocId)
+          .where("jobId", isEqualTo: widget.jobDocId)
           .snapshots(),
       builder: (context, snapshot) {
-        final count = snapshot.data?.docs.length ?? 0;
-        final workerIds = snapshot.data?.docs
-                .map((d) =>
-                    (d.data() as Map<String, dynamic>)["workerId"]
-                        ?.toString() ??
-                    "")
-                .where((id) => id.isNotEmpty)
-                .toList() ??
-            [];
-
+        // Only update when real data arrives — never reset on waiting/error
+        if (snapshot.hasData) {
+          final newCount = snapshot.data!.docs.length;
+          final newIds = snapshot.data!.docs
+              .map((d) =>
+                  (d.data() as Map<String, dynamic>)["workerId"]?.toString() ?? "")
+              .where((id) => id.isNotEmpty)
+              .toList();
+          // Write through to class-level cache
+          _countCache[widget.jobDocId] = newCount;
+          _idsCache[widget.jobDocId] = newIds;
+          // Only call setState if values actually changed
+          if (newCount != _count || newIds.length != _workerIds.length) {
+            // Schedule after build to avoid calling setState during build
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() {
+                  _count = newCount;
+                  _workerIds = newIds;
+                });
+              }
+            });
+          }
+        }
         return Row(
           children: [
-            if (count > 0) ...[
-              _ApplicantAvatarStack(applicantIds: workerIds),
-              const SizedBox(width: 10),
+            if (_count > 0) ...[
+              const Icon(Icons.people, size: 16, color: Colors.grey),
+              const SizedBox(width: 6),
               Text(
-                "$count applicant${count == 1 ? '' : 's'}",
+                "$_count applicant${_count == 1 ? '' : 's'}",
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
             ] else ...[
@@ -705,22 +756,6 @@ class _LiveApplicantFooter extends StatelessWidget {
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
               ),
             ],
-            const Spacer(),
-            if (count > 0)
-              Row(
-                children: [
-                  Text(
-                    "View",
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(width: 2),
-                  Icon(Icons.arrow_forward_ios,
-                      size: 12, color: Colors.grey.shade500),
-                ],
-              ),
           ],
         );
       },
@@ -729,263 +764,338 @@ class _LiveApplicantFooter extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-// Applied Job Card
-// The parent StreamBuilder in _AppliedJobsTab already streams
-// real-time application docs, so appData here is always fresh.
-// We only FutureBuilder the job doc (rarely changes).
+// Applied Job Card — static cache, resolves synchronously
 // ─────────────────────────────────────────────────────────
-class _AppliedJobCard extends StatelessWidget {
+class _AppliedJobCard extends StatefulWidget {
   final String appId;
   final Map<String, dynamic> appData;
   final String userId;
 
   const _AppliedJobCard({
-    super.key, 
+    super.key,
     required this.appId,
     required this.appData,
     required this.userId,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final String jobId = appData["jobId"] ?? "";
-    // Status comes from the live-streamed appData — always up to date
-    final String appStatus = (appData["status"] ?? "pending").toString();
-    final bool isAccepted = appStatus.toLowerCase() == "accepted";
-    final bool isDenied = appStatus.toLowerCase() == "denied";
+  State<_AppliedJobCard> createState() => _AppliedJobCardState();
+}
 
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection("jobs").doc(jobId).get(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Center(
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Color(0xFFFFB544))),
-          );
+class _AppliedJobCardState extends State<_AppliedJobCard>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  // ── Static caches — survive tab switches & widget rebuilds ──
+  static final Map<String, Map<String, dynamic>> _jobCache = {};
+  static final Map<String, Map<String, dynamic>> _userCache = {};
+
+  Map<String, dynamic>? _jobData;
+  Map<String, dynamic>? _employerData;
+  // _loaded starts true if cache already has both — zero flicker
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  void _resolve() {
+    final jobId = widget.appData["jobId"] as String? ?? "";
+    final employerId = widget.appData["employerId"] as String? ?? "";
+
+    // Read synchronously from cache — no setState needed
+    if (_jobCache.containsKey(jobId)) _jobData = _jobCache[jobId];
+    if (_userCache.containsKey(employerId)) _employerData = _userCache[employerId];
+
+    if (_jobData != null && _employerData != null) {
+      // Both cached — paint immediately without any async gap
+      _loaded = true;
+      return;
+    }
+
+    // Partial or full cache miss — fetch what's missing
+    _fetch(jobId, employerId);
+  }
+
+  Future<void> _fetch(String jobId, String employerId) async {
+    bool changed = false;
+
+    if (_jobData == null && jobId.isNotEmpty) {
+      // Check shared _Cache first (written by other cards)
+      if (_Cache.jobs.containsKey(jobId)) {
+        _jobData = _Cache.jobs[jobId];
+        _jobCache[jobId] = _jobData!;
+        changed = true;
+      } else {
+        final doc = await FirebaseFirestore.instance
+            .collection("jobs")
+            .doc(jobId)
+            .get();
+        if (doc.exists) {
+          _jobData = doc.data() as Map<String, dynamic>;
+          _jobCache[jobId] = _jobData!;
+          _Cache.jobs[jobId] = _jobData!;
+          changed = true;
         }
+      }
+    }
 
-        if (!snapshot.data!.exists) return const SizedBox.shrink();
-
-        final job = snapshot.data!.data() as Map<String, dynamic>;
-        final String title = job["title"] ?? "No Title";
-        final String location = job["location"] ?? "No Location";
-        final String postedBy = job["postedBy"] ?? "";
-        final dynamic dateValue = job["date"];
-        String formattedDate = "";
-        if (dateValue != null) {
-          if (dateValue is Timestamp) {
-            final d = dateValue.toDate();
-            formattedDate = "${_monthName(d.month)} ${d.day}, ${d.year}";
-          } else if (dateValue is String) {
-            formattedDate = dateValue;
-          }
+    if (_employerData == null && employerId.isNotEmpty) {
+      if (_Cache.users.containsKey(employerId)) {
+        _employerData = _Cache.users[employerId];
+        _userCache[employerId] = _employerData!;
+        changed = true;
+      } else {
+        final doc = await FirebaseFirestore.instance
+            .collection("users")
+            .doc(employerId)
+            .get();
+        if (doc.exists) {
+          _employerData = doc.data() as Map<String, dynamic>;
+          _userCache[employerId] = _employerData!;
+          _Cache.users[employerId] = _employerData!;
+          changed = true;
         }
+      }
+    }
 
-        final jobForDetails = {
-          ...job,
-          "jobId": jobId,
-          "date": job["date"] is Timestamp
-              ? (job["date"] as Timestamp)
-                  .toDate()
-                  .toLocal()
-                  .toString()
-                  .split(' ')[0]
-              : (job["date"] ?? ""),
-        };
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            // Subtle border indicating final status
-            border: isAccepted
-                ? Border.all(
-                    color: const Color(0xFF27AE60).withOpacity(0.4),
-                    width: 1.5)
-                : isDenied
-                    ? Border.all(color: Colors.grey.shade300, width: 1.5)
-                    : null,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Status badge ──
-                Row(
-                  children: [_ApplicationStatusBadge(status: appStatus)],
-                ),
-                const SizedBox(height: 12),
-
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-
-                Row(
-                  children: [
-                    const Icon(Icons.location_on_outlined,
-                        size: 16, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(location,
-                          style: const TextStyle(
-                              fontSize: 14, color: Colors.black87),
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                  ],
-                ),
-
-                if (formattedDate.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today_outlined,
-                          size: 15, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(formattedDate,
-                          style: const TextStyle(
-                              fontSize: 14, color: Colors.black87)),
-                    ],
-                  ),
-                ],
-
-                const SizedBox(height: 14),
-                const Divider(height: 1),
-                const SizedBox(height: 14),
-
-                // ── Bottom row: employer + Details button ──
-                Row(
-                  children: [
-                    if (postedBy.isNotEmpty)
-                      _EmployerProfileRow(
-                        employerId: postedBy,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                WorkerProfileScreen(userId: postedBy),
-                          ),
-                        ),
-                      ),
-                    const Spacer(),
-                    // "Details" button — only shown when employer has decided
-                    if (isAccepted || isDenied)
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isAccepted
-                              ? const Color(0xFF27AE60)
-                              : Colors.grey.shade600,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 10),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => JobDetailsScreen(
-                              job: jobForDetails,
-                              currentUserId: userId,
-                            ),
-                          ),
-                        ),
-                        child: const Text("Details",
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                  ],
-                ),
-
-                // ── Accepted congratulations banner ──
-                if (isAccepted) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F8EF),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.celebration_rounded,
-                            size: 16, color: Color(0xFF27AE60)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            "Congratulations! Your application was accepted.",
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.green.shade700,
-                                height: 1.4,
-                                fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                // ── Denied info banner ──
-                if (isDenied) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline,
-                            size: 16, color: Colors.grey.shade500),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            "Sorry, someone else has already been chosen for this spot.",
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                                height: 1.4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    if (changed && mounted) setState(() => _loaded = true);
   }
 
   String _monthName(int month) {
     const months = [
-      "",
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec"
+      "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
     ];
     return months[month];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    final String appStatus =
+        (widget.appData["status"] ?? "pending").toString();
+    final bool isAccepted = appStatus.toLowerCase() == "accepted";
+    final bool isDenied = appStatus.toLowerCase() == "denied";
+
+    final String title = _jobData?["title"] ?? "Loading...";
+    final String location = _jobData?["location"] ?? "";
+    final String jobId = widget.appData["jobId"] ?? "";
+
+    String formattedDate = "";
+    final dynamic dateValue = _jobData?["date"];
+    if (dateValue != null) {
+      if (dateValue is Timestamp) {
+        final d = dateValue.toDate();
+        formattedDate = "${_monthName(d.month)} ${d.day}, ${d.year}";
+      } else if (dateValue is String) {
+        formattedDate = dateValue;
+      }
+    }
+
+    final String employerName =
+        _employerData?["name"] ?? _employerData?["displayName"] ?? "Employer";
+    final String? employerPhoto = _employerData?["profileImageUrl"] as String?;
+    final String employerId = widget.appData["employerId"] ?? "";
+
+    final jobForDetails = _jobData == null
+        ? null
+        : {
+            ..._jobData!,
+            "jobId": jobId,
+            "date": _jobData!["date"] is Timestamp
+                ? (_jobData!["date"] as Timestamp)
+                    .toDate()
+                    .toLocal()
+                    .toString()
+                    .split(' ')[0]
+                : (_jobData!["date"] ?? ""),
+          };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: isAccepted
+            ? Border.all(color: const Color(0xFF27AE60).withOpacity(0.4), width: 1.5)
+            : isDenied
+                ? Border.all(color: Colors.grey.shade300, width: 1.5)
+                : null,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [_ApplicationStatusBadge(status: appStatus)]),
+            const SizedBox(height: 12),
+            Text(title,
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            if (location.isNotEmpty)
+              Row(
+                children: [
+                  const Icon(Icons.location_on_outlined,
+                      size: 16, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(location,
+                        style: const TextStyle(
+                            fontSize: 14, color: Colors.black87),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ),
+            if (formattedDate.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined,
+                      size: 15, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(formattedDate,
+                      style:
+                          const TextStyle(fontSize: 14, color: Colors.black87)),
+                ],
+              ),
+            ],
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                if (_loaded && employerId.isNotEmpty)
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => WorkerProfileScreen(userId: employerId),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: Colors.grey.shade200,
+                          backgroundImage: (employerPhoto != null &&
+                                  employerPhoto.isNotEmpty)
+                              ? NetworkImage(employerPhoto)
+                              : null,
+                          child: (employerPhoto == null || employerPhoto.isEmpty)
+                              ? const Icon(Icons.person,
+                                  color: Colors.grey, size: 20)
+                              : null,
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text("Posted by",
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.grey)),
+                            Text(employerName,
+                                style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                const Spacer(),
+                if ((isAccepted || isDenied) && jobForDetails != null)
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isAccepted
+                          ? const Color(0xFF27AE60)
+                          : Colors.grey.shade600,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => JobDetailsScreen(
+                          job: jobForDetails,
+                          currentUserId: widget.userId,
+                        ),
+                      ),
+                    ),
+                    child: const Text("Details",
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+            if (isAccepted) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F8EF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.celebration_rounded,
+                        size: 16, color: Color(0xFF27AE60)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Congratulations! Your application was accepted.",
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green.shade700,
+                            height: 1.4,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (isDenied) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.grey.shade500),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Sorry, someone else has already been chosen for this spot.",
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -1019,7 +1129,7 @@ class _ApplicationStatusBadge extends StatelessWidget {
         icon = Icons.cancel_outlined;
         label = "Not Selected";
         break;
-      default: // pending
+      default:
         bgColor = const Color(0xFFFFF8EC);
         textColor = const Color(0xFFB8860B);
         borderColor = const Color(0xFFFFB544);
@@ -1058,7 +1168,7 @@ class _ApplicationStatusBadge extends StatelessWidget {
 // Applicant avatar stack
 // ─────────────────────────────────────────────────────────
 class _ApplicantAvatarStack extends StatelessWidget {
-  final List applicantIds;
+  final List<String> applicantIds;
   const _ApplicantAvatarStack({required this.applicantIds});
 
   @override
@@ -1074,8 +1184,7 @@ class _ApplicantAvatarStack extends StatelessWidget {
           ...List.generate(displayCount, (i) {
             return Positioned(
               left: i * 24.0,
-              child:
-                  _UserAvatar(userId: applicantIds[i].toString(), size: 36),
+              child: _CachedAvatar(userId: applicantIds[i], size: 36),
             );
           }),
           if (extra > 0)
@@ -1107,41 +1216,84 @@ class _ApplicantAvatarStack extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-// User avatar
+// Cached avatar — static cache, resolves synchronously
 // ─────────────────────────────────────────────────────────
-class _UserAvatar extends StatelessWidget {
+class _CachedAvatar extends StatefulWidget {
   final String userId;
   final double size;
-  const _UserAvatar({required this.userId, this.size = 40});
+  const _CachedAvatar({required this.userId, this.size = 40});
+
+  @override
+  State<_CachedAvatar> createState() => _CachedAvatarState();
+}
+
+class _CachedAvatarState extends State<_CachedAvatar> {
+  // Static cache — survives across all avatar instances
+  static final Map<String, String?> _photoCache = {};
+
+  String? _photoUrl;
+  bool _fetched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  void _resolve() {
+    if (_photoCache.containsKey(widget.userId)) {
+      // Synchronous hit — no setState, no flicker
+      _photoUrl = _photoCache[widget.userId];
+      _fetched = true;
+      return;
+    }
+    // Also check shared _Cache
+    if (_Cache.users.containsKey(widget.userId)) {
+      _photoUrl = _Cache.users[widget.userId]!["profileImageUrl"] as String?;
+      _photoCache[widget.userId] = _photoUrl;
+      _fetched = true;
+      return;
+    }
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    final doc = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(widget.userId)
+        .get();
+    if (doc.exists) {
+      final data = doc.data() as Map<String, dynamic>;
+      _Cache.users[widget.userId] = data;
+      final url = data["profileImageUrl"] as String?;
+      _photoCache[widget.userId] = url;
+      if (mounted) setState(() {
+        _photoUrl = url;
+        _fetched = true;
+      });
+    } else {
+      _photoCache[widget.userId] = null;
+      if (mounted) setState(() => _fetched = true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot>(
-      future:
-          FirebaseFirestore.instance.collection("users").doc(userId).get(),
-      builder: (context, snap) {
-        String? photoUrl;
-        if (snap.hasData && snap.data!.exists) {
-          final data = snap.data!.data() as Map<String, dynamic>;
-          photoUrl = data["profileImageUrl"] as String?;
-        }
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
-          ),
-          child: ClipOval(
-            child: photoUrl != null && photoUrl.isNotEmpty
-                ? Image.network(photoUrl, fit: BoxFit.cover)
-                : Container(
-                    color: Colors.grey.shade300,
-                    child: const Icon(Icons.person, color: Colors.white),
-                  ),
-          ),
-        );
-      },
+    return Container(
+      width: widget.size,
+      height: widget.size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+      ),
+      child: ClipOval(
+        child: _photoUrl != null && _photoUrl!.isNotEmpty
+            ? Image.network(_photoUrl!, fit: BoxFit.cover)
+            : Container(
+                color: Colors.grey.shade300,
+                child: const Icon(Icons.person, color: Colors.white),
+              ),
+      ),
     );
   }
 }
@@ -1175,7 +1327,6 @@ class _ApplicantsBottomSheet extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Drag handle
                   Center(
                     child: Container(
                       width: 40,
@@ -1187,15 +1338,11 @@ class _ApplicantsBottomSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Header
                   Row(
                     children: [
-                      const Text(
-                        "Applicants",
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
+                      const Text("Applicants",
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1220,13 +1367,11 @@ class _ApplicantsBottomSheet extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-
                   if (snapshot.connectionState == ConnectionState.waiting)
                     const Expanded(
                       child: Center(
-                        child: CircularProgressIndicator(
-                            color: Color(0xFFFFB544)),
-                      ),
+                          child:
+                              CircularProgressIndicator(color: Color(0xFFFFB544))),
                     )
                   else if (docs.isEmpty)
                     const Expanded(
@@ -1234,14 +1379,10 @@ class _ApplicantsBottomSheet extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.people_outline,
-                                size: 56, color: Colors.grey),
+                            Icon(Icons.people_outline, size: 56, color: Colors.grey),
                             SizedBox(height: 12),
-                            Text(
-                              "No applicants yet.",
-                              style:
-                                  TextStyle(color: Colors.grey, fontSize: 15),
-                            ),
+                            Text("No applicants yet.",
+                                style: TextStyle(color: Colors.grey, fontSize: 15)),
                           ],
                         ),
                       ),
@@ -1251,21 +1392,15 @@ class _ApplicantsBottomSheet extends StatelessWidget {
                       child: ListView.separated(
                         controller: scrollController,
                         itemCount: docs.length,
-                        separatorBuilder: (_, __) =>
-                            const Divider(height: 1),
+                        separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (context, index) {
-                          final appDoc = docs[index];
                           final appData =
-                              appDoc.data() as Map<String, dynamic>;
+                              docs[index].data() as Map<String, dynamic>;
                           final workerId =
                               appData["workerId"]?.toString() ?? "";
-                          final currentStatus =
-                              (appData["status"] ?? "pending").toString();
-
-                          return _ApplicantActionTile(
+                          return _ApplicantProfileTile(
+                            key: ValueKey(workerId),
                             userId: workerId,
-                            jobDocId: jobDocId,
-                            currentStatus: currentStatus,
                             onViewProfile: () {
                               Navigator.pop(context);
                               Navigator.push(
@@ -1276,26 +1411,6 @@ class _ApplicantsBottomSheet extends StatelessWidget {
                                 ),
                               );
                             },
-                            onAccept: () => _confirmAction(
-                              context: context,
-                              title: "Accept Application",
-                              message:
-                                  "Are you sure you want to accept this applicant?",
-                              confirmLabel: "Accept",
-                              confirmColor: const Color(0xFF27AE60),
-                              onConfirmed: () => _updateStatus(
-                                  context, appDoc.reference, "accepted"),
-                            ),
-                            onDeny: () => _confirmAction(
-                              context: context,
-                              title: "Deny Application",
-                              message:
-                                  "Are you sure you want to mark this applicant as not selected?",
-                              confirmLabel: "Deny",
-                              confirmColor: Colors.redAccent,
-                              onConfirmed: () => _updateStatus(
-                                  context, appDoc.reference, "denied"),
-                            ),
                           );
                         },
                       ),
@@ -1308,426 +1423,118 @@ class _ApplicantsBottomSheet extends StatelessWidget {
       },
     );
   }
+}
 
-  /// Stylish confirmation dialog overlay
-  void _confirmAction({
-    required BuildContext context,
-    required String title,
-    required String message,
-    required String confirmLabel,
-    required Color confirmColor,
-    required VoidCallback onConfirmed,
-  }) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) => Dialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.12),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Icon circle
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: confirmColor.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  confirmLabel == "Accept"
-                      ? Icons.check_circle_outline_rounded
-                      : Icons.cancel_outlined,
-                  color: confirmColor,
-                  size: 34,
-                ),
-              ),
-              const SizedBox(height: 16),
+// ─────────────────────────────────────────────────────────
+// Applicant profile tile
+// ─────────────────────────────────────────────────────────
+class _ApplicantProfileTile extends StatefulWidget {
+  final String userId;
+  final VoidCallback onViewProfile;
 
-              Text(
-                title,
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
+  const _ApplicantProfileTile({
+    super.key,
+    required this.userId,
+    required this.onViewProfile,
+  });
 
-              Text(
-                message,
-                style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                    height: 1.5),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
+  @override
+  State<_ApplicantProfileTile> createState() => _ApplicantProfileTileState();
+}
 
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 13),
-                        side: BorderSide(color: Colors.grey.shade300),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                      ),
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: Text(
-                        "Cancel",
-                        style: TextStyle(
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: confirmColor,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(dialogContext);
-                        onConfirmed();
-                      },
-                      child: Text(
-                        confirmLabel,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+class _ApplicantProfileTileState extends State<_ApplicantProfileTile>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  String _name = "";
+  String? _photoUrl;
+  String _profession = "";
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
   }
 
-  Future<void> _updateStatus(
-    BuildContext context,
-    DocumentReference ref,
-    String newStatus,
-  ) async {
-    try {
-      await ref.update({"status": newStatus});
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(newStatus == "accepted"
-                ? "Application accepted!"
-                : "Marked as not selected."),
-            backgroundColor: newStatus == "accepted"
-                ? Colors.green
-                : Colors.grey.shade700,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to update: $e"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+  void _resolve() {
+    if (_Cache.users.containsKey(widget.userId)) {
+      final d = _Cache.users[widget.userId]!;
+      _name = d["name"] ?? d["displayName"] ?? "Unknown";
+      _photoUrl = d["profileImageUrl"] as String?;
+      _profession = d["profession"] ?? d["jobTitle"] ?? "";
+      _loaded = true;
+      return;
+    }
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    if (widget.userId.isEmpty) return;
+    final doc = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(widget.userId)
+        .get();
+    if (doc.exists) {
+      final d = doc.data() as Map<String, dynamic>;
+      _Cache.users[widget.userId] = d;
+      if (mounted) {
+        setState(() {
+          _name = d["name"] ?? d["displayName"] ?? "Unknown";
+          _photoUrl = d["profileImageUrl"] as String?;
+          _profession = d["profession"] ?? d["jobTitle"] ?? "";
+          _loaded = true;
+        });
       }
     }
   }
-}
-
-// ─────────────────────────────────────────────────────────
-// Applicant action tile
-// ─────────────────────────────────────────────────────────
-class _ApplicantActionTile extends StatelessWidget {
-  final String userId;
-  final String jobDocId;
-  final String currentStatus;
-  final VoidCallback onViewProfile;
-  final VoidCallback onAccept;
-  final VoidCallback onDeny;
-
-  const _ApplicantActionTile({
-    required this.userId,
-    required this.jobDocId,
-    required this.currentStatus,
-    required this.onViewProfile,
-    required this.onAccept,
-    required this.onDeny,
-  });
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance
-          .collection("users")
-          .doc(userId)
-          .get(),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Color(0xFFFFB544))),
-          );
-        }
-
-        final data = snap.data!.data() as Map<String, dynamic>? ?? {};
-        final name = data["name"] ?? data["displayName"] ?? "Unknown";
-        final photoUrl = data["profileImageUrl"] as String?;
-        final String profession =
-            data["profession"] ?? data["jobTitle"] ?? "";
-
-        Color statusColor;
-        String statusLabel;
-        switch (currentStatus.toLowerCase()) {
-          case "accepted":
-            statusColor = const Color(0xFF27AE60);
-            statusLabel = "Accepted";
-            break;
-          case "denied":
-            statusColor = Colors.grey;
-            statusLabel = "Not Selected";
-            break;
-          default:
-            statusColor = const Color(0xFFB8860B);
-            statusLabel = "Pending";
-        }
-
-        // Lock buttons once a decision has been made
-        final bool isDecided = currentStatus.toLowerCase() == "accepted" ||
-            currentStatus.toLowerCase() == "denied";
-
-        return InkWell(
-          onTap: onViewProfile,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Avatar
-                GestureDetector(
-                  onTap: onViewProfile,
-                  child: CircleAvatar(
-                    radius: 26,
-                    backgroundColor: Colors.grey.shade200,
-                    backgroundImage:
-                        (photoUrl != null && photoUrl.isNotEmpty)
-                            ? NetworkImage(photoUrl)
-                            : null,
-                    child: (photoUrl == null || photoUrl.isEmpty)
-                        ? const Icon(Icons.person,
-                            color: Colors.grey, size: 26)
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Name + profession + status pill
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 15)),
-                      if (profession.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(profession,
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600)),
-                      ],
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: statusColor.withOpacity(0.4),
-                              width: 1),
-                        ),
-                        child: Text(
-                          statusLabel,
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: statusColor),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 8),
-
-                // Action buttons — replaced by status icon once decided
-                if (!isDecided) ...[
-                  _ActionButton(
-                    label: "Accept",
-                    icon: Icons.check_rounded,
-                    color: const Color(0xFF2ECC71),
-                    onTap: onAccept,
-                  ),
-                  const SizedBox(width: 6),
-                  _ActionButton(
-                    label: "Deny",
-                    icon: Icons.close_rounded,
-                    color: Colors.redAccent,
-                    onTap: onDeny,
-                  ),
-                ] else ...[
-                  Icon(
-                    currentStatus.toLowerCase() == "accepted"
-                        ? Icons.check_circle_rounded
-                        : Icons.cancel_rounded,
-                    color: currentStatus.toLowerCase() == "accepted"
-                        ? const Color(0xFF27AE60)
-                        : Colors.grey,
-                    size: 28,
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────
-// Small action button
-// ─────────────────────────────────────────────────────────
-class _ActionButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.4), width: 1),
-        ),
+    super.build(context);
+    return InkWell(
+      onTap: widget.onViewProfile,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 4),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: color)),
+            CircleAvatar(
+              radius: 26,
+              backgroundColor: Colors.grey.shade200,
+              backgroundImage:
+                  (_photoUrl != null && _photoUrl!.isNotEmpty)
+                      ? NetworkImage(_photoUrl!)
+                      : null,
+              child: (_photoUrl == null || _photoUrl!.isEmpty)
+                  ? const Icon(Icons.person, color: Colors.grey, size: 26)
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _loaded ? _name : "",
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  if (_profession.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(_profession,
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600)),
+                  ],
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios,
+                size: 14, color: Colors.grey.shade400),
           ],
         ),
       ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────
-// Employer profile row
-// ─────────────────────────────────────────────────────────
-class _EmployerProfileRow extends StatelessWidget {
-  final String employerId;
-  final VoidCallback onTap;
-  const _EmployerProfileRow(
-      {required this.employerId, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance
-          .collection("users")
-          .doc(employerId)
-          .get(),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const SizedBox(
-            height: 36,
-            width: 36,
-            child: CircularProgressIndicator(
-                strokeWidth: 2, color: Color(0xFFFFB544)),
-          );
-        }
-        final data = snap.data!.data() as Map<String, dynamic>? ?? {};
-        final name = data["name"] ?? data["displayName"] ?? "Employer";
-        final photoUrl = data["profileImageUrl"] as String?;
-
-        return GestureDetector(
-          onTap: onTap,
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.grey.shade200,
-                backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
-                    ? NetworkImage(photoUrl)
-                    : null,
-                child: (photoUrl == null || photoUrl.isEmpty)
-                    ? const Icon(Icons.person,
-                        color: Colors.grey, size: 20)
-                    : null,
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Posted by",
-                      style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  Text(name,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

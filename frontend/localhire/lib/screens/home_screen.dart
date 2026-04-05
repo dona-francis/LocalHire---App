@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7),
+      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       body: SafeArea(
         child: Column(
           children: [
@@ -563,110 +563,145 @@ for (var doc in snapshot.data!.docs) {
   }
 
   Widget _jobCard(Map<String, dynamic> job) {
-    final String type = job["type"] ?? "N/A";
-    final bool isInstant = job["isInstantJob"] ?? false;
-    final String title = job["title"] ?? "No Title";
-    final String location = job["location"] ?? "No Location";
-    final salary = job["salary"] ?? 0;
-    final Timestamp? createdAt = job["createdAt"];
-    final dynamic dateValue = job["date"];
-    String preferredDate = "";
-    if (dateValue != null) {
-      if (dateValue is Timestamp) {
-        preferredDate =
-            dateValue.toDate().toLocal().toString().split(' ')[0];
-      } else if (dateValue is String) {
-        preferredDate = dateValue;
-      }
-    }
+  final String type = job["type"] ?? "N/A";
+  final bool isInstant = job["isInstantJob"] ?? false;
+  final String title = job["title"] ?? "No Title";
+  final String location = job["location"] ?? "No Location";
+  final salary = job["salary"] ?? 0;
+  final Timestamp? createdAt = job["createdAt"];
+  final dynamic dateValue = job["date"];
+  String preferredDate = "";
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFE7BF),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
+  if (dateValue != null) {
+    if (dateValue is Timestamp) {
+      preferredDate =
+          dateValue.toDate().toLocal().toString().split(' ')[0];
+    } else if (dateValue is String) {
+      preferredDate = dateValue;
+    }
+  }
+
+  return Container(
+    margin: const EdgeInsets.only(bottom: 16),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: const Color.fromARGB(255, 245, 228, 195), 
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color.fromARGB(255, 255, 247, 232), // light theme tint
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                isInstant ? "INSTANT $type" : type,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color:  Color.fromARGB(255, 91, 67, 22),
                 ),
-                child: Text(isInstant ? "INSTANT $type" : type),
               ),
-              const SizedBox(width: 8),
-              Text(
-                createdAt != null ? _timeAgo(createdAt) : "",
-                style: const TextStyle(color: Colors.grey),
-              ),
-              const Spacer(),
-              Text(
-                "₹$salary",
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(title,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              createdAt != null ? _timeAgo(createdAt) : "",
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const Spacer(),
+            Text(
+              "₹$salary",
               style: const TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.location_on, size: 16, color: Colors.grey),
-              const SizedBox(width: 4),
-              Text(location),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Text(
-                "Preferred: $preferredDate",
-                style:
-                    const TextStyle(fontSize: 12, color: Colors.grey),
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
               ),
-              const Spacer(),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFB544)),
-                onPressed: () {
-                  final jobForDetails = {
-                    ...job,
-                    "date": job["date"] is Timestamp
-                        ? (job["date"] as Timestamp)
-                            .toDate()
-                            .toLocal()
-                            .toString()
-                            .split(' ')[0]
-                        : (job["date"] ?? "")
-                  };
-                   Navigator.push(
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        Row(
+          children: [
+            const Icon(Icons.location_on, size: 16, color: Colors.grey),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                location,
+                style: const TextStyle(color: Colors.black87),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 10),
+
+        Row(
+          children: [
+            Text(
+              "Preferred: $preferredDate",
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const Spacer(),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFB544), // ✅ theme color
+                foregroundColor: const Color.fromARGB(255, 79, 54, 20), // ✅ better contrast
+                elevation: 0,
+              ),
+              onPressed: () {
+                final jobForDetails = {
+                  ...job,
+                  "date": job["date"] is Timestamp
+                      ? (job["date"] as Timestamp)
+                          .toDate()
+                          .toLocal()
+                          .toString()
+                          .split(' ')[0]
+                      : (job["date"] ?? "")
+                };
+                Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => JobDetailsScreen(
                       job: jobForDetails,
-                      currentUserId: widget.userId,  // ← add this
+                      currentUserId: widget.userId,
                     ),
                   ),
                 );
-                },
-                child: const Text("View"),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
+              },
+              child: const Text("View"),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
   String _timeAgo(Timestamp timestamp) {
     final now = DateTime.now();
     final date = timestamp.toDate();
