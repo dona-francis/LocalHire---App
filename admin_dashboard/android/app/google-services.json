@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "955823943443",
+    "project_id": "localhire-f3d28",
+    "storage_bucket": "localhire-f3d28.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:955823943443:android:012b2881fde1d909aef4e6",
+        "android_client_info": {
+          "package_name": "com.example.admin_dashboard"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMkvaMU-cQ4P34LfQIEh7sOhWDhA3H5Yo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:955823943443:android:a68cc8e01f998dcfaef4e6",
+        "android_client_info": {
+          "package_name": "com.example.localhire"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMkvaMU-cQ4P34LfQIEh7sOhWDhA3H5Yo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

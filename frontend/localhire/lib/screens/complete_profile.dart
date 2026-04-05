@@ -117,101 +117,83 @@ class _CompleteProfileScreenState
     }
   }
 
-  Future<void> _saveProfile() async {
-    setState(() => _isLoading = true);
+Future<void> _saveProfile() async {
+  setState(() => _isLoading = true);
 
-    try {
-      final authService = AuthService();
-      final hashedPassword = authService.hashPassword(widget.password);
+  try {
+    final authService = AuthService();
+    final hashedPassword = authService.hashPassword(widget.password);
 
-      final user = FirebaseAuth.instance.currentUser;
+    User? user = FirebaseAuth.instance.currentUser;
 
-// wait a bit if null (fix timing issue)
-if (user == null) {
-  await Future.delayed(const Duration(seconds: 1));
-}
-
-final firebaseUid = FirebaseAuth.instance.currentUser?.uid;
-
-if (firebaseUid == null) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text("Something went wrong. Please try again.")
-    ),
-  );
-  setState(() => _isLoading = false);
-  return;
-}
-
-      final userDoc = FirebaseFirestore.instance
-          .collection("users")
-          .doc(firebaseUid);
-
-      final userId = userDoc.id;
-
-      // Upload Profile Image
-      final profileRef = FirebaseStorage.instance
-          .ref()
-          .child("profile_images")
-          .child(userId)
-          .child(p.basename(_profileImage!.path));
-      await profileRef.putFile(_profileImage!);
-      final profileUrl = await profileRef.getDownloadURL();
-
-      // Upload ID Image
-      final idRef = FirebaseStorage.instance
-          .ref()
-          .child("id_proofs")
-          .child(userId)
-          .child(p.basename(_idImage!.path));
-      await idRef.putFile(_idImage!);
-      final idUrl = await idRef.getDownloadURL();
-
-      final encryptedId = encryptData(idUrl);
-
-      // Build emergency contacts list
-      final emergencyContactsList = _emergencyContacts
-          .map((c) => {
-                "name": c["name"]!.text.trim(),
-                "phone": c["phone"]!.text.trim(),
-              })
-          .toList();
-
-      // Save to Firestore
-      await userDoc.set({
-        "username": widget.username,
-        "password": hashedPassword,
-        "phone": widget.phone,
-        "name": _nameController.text.trim(),
-        "age": int.parse(_ageController.text.trim()),
-        "gender": _selectedGender,
-        "location": _locationController.text.trim(),
-        "locationGeoPoint": GeoPoint(_selectedLat!, _selectedLng!),
-        "skills": skills,
-        "profileImage": profileUrl,
-        "idProof": encryptedId,
-        "emergencyContacts": emergencyContactsList,
-        "verificationStatus": "pending",
-        "createdAt": Timestamp.now(),
-      });
-
-      await authService.saveSession(userId);
-      ChatService().setCurrentUser(userId);
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HomeScreen(userId: userId),
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+    if (user == null) {
+      throw Exception("User not logged in");
     }
 
-    setState(() => _isLoading = false);
+    final userId = user.uid;
+
+    if (_profileImage == null || _idImage == null) {
+      throw Exception("Select both images");
+    }
+
+    // ✅ USE DEFAULT STORAGE (IMPORTANT)
+    final storage = FirebaseStorage.instance;
+
+    // ✅ PROFILE IMAGE
+    final profileRef = storage.ref().child(
+      "profile_images/$userId/profile.jpg",
+    );
+
+    await profileRef.putFile(_profileImage!);
+    final profileUrl = await profileRef.getDownloadURL();
+
+    // ✅ ID PROOF
+    final idRef = storage.ref().child(
+      "id_proofs/$userId/id.jpg",
+    );
+
+    await idRef.putFile(_idImage!);
+    final idProofUrl = await idRef.getDownloadURL();
+
+    final userDoc =
+        FirebaseFirestore.instance.collection("users").doc(userId);
+
+    await userDoc.set({
+      "username": widget.username,
+      "password": hashedPassword,
+      "phone": widget.phone,
+      "name": _nameController.text.trim(),
+      "age": int.parse(_ageController.text.trim()),
+      "gender": _selectedGender,
+      "location": _locationController.text.trim(),
+      "locationGeoPoint": GeoPoint(_selectedLat!, _selectedLng!),
+      "skills": skills,
+      "profileImage": profileUrl,
+      "idProof": idProofUrl,
+      "verificationStatus": "pending",
+      "isBanned": false,
+      "createdAt": Timestamp.now(),
+    });
+
+    await authService.saveSession(userId);
+    ChatService().setCurrentUser(userId);
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => HomeScreen(userId: userId),
+      ),
+    );
+  } catch (e) {
+    print("🔥 ERROR: $e");
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Error: $e")),
+    );
   }
+
+  setState(() => _isLoading = false);
+}
 
   void _addSkill() {
     final skill = _skillController.text.trim();

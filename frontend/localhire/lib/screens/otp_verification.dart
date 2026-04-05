@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import 'complete_profile.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String verificationId;
@@ -66,42 +67,59 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   void _verifyOtp() async {
-    String otp = _controllers.map((c) => c.text).join();
+  String otp = _controllers.map((c) => c.text).join();
 
-    if (otp.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter complete OTP")),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      await _authService.verifyOTP(
-        verificationId: _verificationId,
-        smsCode: otp,
-      );
-
-      setState(() => _isLoading = false);
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => CompleteProfileScreen(
-            username: widget.username,
-            password: widget.password,
-            phone: widget.phone,
-          ),
-        ),
-      );
-    } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
-    }
+  if (otp.length < 6) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Please enter complete OTP")),
+    );
+    return;
   }
+
+  setState(() => _isLoading = true);
+
+  try {
+    // 🔥 CREATE CREDENTIAL
+    final credential = PhoneAuthProvider.credential(
+      verificationId: _verificationId,
+      smsCode: otp,
+    );
+
+    // 🔥 SIGN IN USER (THIS WAS MISSING)
+    final userCredential =
+        await FirebaseAuth.instance.signInWithCredential(credential);
+
+    final user = userCredential.user;
+
+    print("✅ USER AFTER OTP: ${user?.uid}");
+
+    if (user == null) {
+      throw Exception("User login failed");
+    }
+
+    setState(() => _isLoading = false);
+
+    // ✅ NOW SAFE TO NAVIGATE
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CompleteProfileScreen(
+          username: widget.username,
+          password: widget.password,
+          phone: widget.phone,
+        ),
+      ),
+    );
+  } catch (e) {
+    setState(() => _isLoading = false);
+
+    print("🔥 OTP ERROR: $e");
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Error: $e")),
+    );
+  }
+}
 
   void _resendOtp() async {
     setState(() => _isLoading = true);
