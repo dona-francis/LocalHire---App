@@ -890,3 +890,4 @@ class _FullScreenImage extends StatelessWidget {
     );
   }
 }
+
