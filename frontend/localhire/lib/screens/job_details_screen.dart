@@ -15,7 +15,7 @@ class JobDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String jobId = job["jobId"] ?? job["id"] ?? "";
+    final String jobId = job["jobId"] ?? "";
     final String employerId = job["postedBy"] ?? "";
 
     return Scaffold(
@@ -155,6 +155,9 @@ class JobDetailsScreen extends StatelessWidget {
                     ),
                   ),
                   onPressed: () {
+                    print("JOB ID:$jobId");
+                    print("WORKER ID: $currentUserId");
+                    print("EMPLOYER ID: $employerId");
                     if (jobId.isEmpty || currentUserId!.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(

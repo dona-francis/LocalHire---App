@@ -16,12 +16,12 @@ class _MyActivityScreenState extends State<MyActivityScreen>
   late TabController _tabController;
   int _selectedTab = 0;
 
-  final List<String> _tabs = ["Posted Jobs", "Applied Jobs", "Completed"];
+  final List<String> _tabs = ["Posted Jobs", "Applied Jobs", "Completed","Requests"];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
       setState(() => _selectedTab = _tabController.index);
     });
@@ -103,6 +103,7 @@ class _MyActivityScreenState extends State<MyActivityScreen>
                 _PostedJobsTab(userId: widget.userId, showCompleted: false),
                 _AppliedJobsTab(userId: widget.userId),
                 _PostedJobsTab(userId: widget.userId, showCompleted: true),
+                _RequestsTab(userId: widget.userId),
               ],
             ),
           ),
@@ -111,7 +112,215 @@ class _MyActivityScreenState extends State<MyActivityScreen>
     );
   }
 }
+// ─────────────────────────────────────────────────────────
+// Tab 4 — Requests (NEW)
+// ─────────────────────────────────────────────────────────
 
+class _RequestsTab extends StatefulWidget {
+  final String userId;
+  const _RequestsTab({required this.userId});
+
+  @override
+  State<_RequestsTab> createState() => _RequestsTabState();
+}
+
+class _RequestsTabState extends State<_RequestsTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection("applications")
+          .where("employerId", isEqualTo: widget.userId)
+          .where("status", isEqualTo: "pending")
+          .snapshots(), // ✅ NO orderBy (stable)
+
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFFFFB544)),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return _emptyState(
+            icon: Icons.notifications_none,
+            message: "No requests at the moment.",
+          );
+        }
+
+        final requests = snapshot.data!.docs;
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: requests.length,
+          itemBuilder: (context, index) {
+            final data =
+                requests[index].data() as Map<String, dynamic>;
+
+            return FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection("jobs")
+                  .doc(data["jobId"])
+                  .get(),
+              builder: (context, jobSnap) {
+                String jobTitle = "Job";
+
+                if (jobSnap.hasData && jobSnap.data!.exists) {
+                  final jobData =
+                      jobSnap.data!.data() as Map<String, dynamic>;
+                  jobTitle = jobData["title"] ?? "Job";
+                }
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 🧾 JOB TITLE
+                        Text(
+                          jobTitle,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        // 👤 WORKER NAME
+                        FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection("users")
+                              .doc(data["workerId"])
+                              .get(),
+                          builder: (context, userSnap) {
+                            String name = "Worker";
+
+                            if (userSnap.hasData &&
+                                userSnap.data!.exists) {
+                              final userData = userSnap.data!.data()
+                                  as Map<String, dynamic>;
+                              name = userData["name"] ?? "Worker";
+                            }
+
+                            return Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            );
+                          },
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        // 💬 ENQUIRY MESSAGE (FIXED)
+                        Text(
+                          (data["question"] ?? "").isNotEmpty
+                              ? data["question"]
+                              : "No message",
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // 📅 DATE
+                        if ((data["preferredDate"] ?? "").isNotEmpty)
+                          Text("📅 Date: ${data["preferredDate"]}"),
+
+                        // ⏰ TIME
+                        if ((data["preferredTime"] ?? "").isNotEmpty)
+                          Text("⏰ Time: ${data["preferredTime"]}"),
+
+                        // 💰 RATE
+                        if ((data["proposedRate"] ?? "").isNotEmpty)
+                          Text("💰 Rate: ₹${data["proposedRate"]}"),
+
+                        const SizedBox(height: 12),
+
+                        // ✅ ACTION BUTTONS
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                ),
+                                onPressed: () async {
+  final workerId = data["workerId"];
+  final jobId = data["jobId"];
+
+  // 1. Accept this application
+  await FirebaseFirestore.instance
+      .collection("applications")
+      .doc(requests[index].id)
+      .update({"status": "accepted"});
+
+  // 2. Add worker to job
+  await FirebaseFirestore.instance
+      .collection("jobs")
+      .doc(jobId)
+      .update({
+    "acceptedBy": FieldValue.arrayUnion([workerId]),
+    "status": "assigned"
+  });
+
+  // 3. Reject others
+  final otherApps = await FirebaseFirestore.instance
+      .collection("applications")
+      .where("jobId", isEqualTo: jobId)
+      .get();
+
+  for (var doc in otherApps.docs) {
+    if (doc.id != requests[index].id) {
+      await doc.reference.update({"status": "denied"});
+    }
+  }
+},
+                                child: const Text("Accept"),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                ),
+                                onPressed: () async {
+                                  await FirebaseFirestore.instance
+                                      .collection("applications")
+                                      .doc(requests[index].id)
+                                      .update({"status": "denied"});
+                                },
+                                child: const Text("Deny"),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+  
 // ─────────────────────────────────────────────────────────
 // Tab 1 & 3 — Posted Jobs
 // ─────────────────────────────────────────────────────────
@@ -276,14 +485,30 @@ class _PostedJobCard extends StatelessWidget {
     }
 
     return GestureDetector(
-      onTap: isCompleted
-          ? () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => JobDetailsScreen(job: _prepareJob(job)),
-                ),
-              )
-          : () => _showApplicantsSheet(context, docId),
+
+  onTap: () {
+     final acceptedBy = job["acceptedBy"] ?? [];
+     final docId = job["jobId"] ?? "";
+  if (isCompleted) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => JobDetailsScreen(
+          job: {
+            ..._prepareJob(job),
+            "jobId": docId, // needed for details
+          },
+          currentUserId: userId,
+        ),
+      ),
+    );
+  } else {
+    _showApplicantsSheet(context, docId);
+  }
+},
+  
+    
+
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
@@ -378,14 +603,14 @@ class _PostedJobCard extends StatelessWidget {
     );
   }
 
-  void _showApplicantsSheet(BuildContext context, String jobDocId) {
+  void _showApplicantsSheet(BuildContext context, String docId) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => _ApplicantsBottomSheet(jobDocId: jobDocId),
+      builder: (_) => _ApplicantsBottomSheet(jobDocId: docId),
     );
   }
 

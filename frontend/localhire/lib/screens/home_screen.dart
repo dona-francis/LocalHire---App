@@ -86,13 +86,44 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return const Center(child: Text("No Jobs Available"));
                   }
-                   List<Map<String, dynamic>> jobs =
-                      snapshot.data!.docs.map((doc) {
-                    return {
-                      ...doc.data() as Map<String, dynamic>,
-                      "jobId": doc.id,   // ← add this
-                    };
-                  }).toList(); 
+List<Map<String, dynamic>> jobs = [];
+
+// Get today's start (00:00)
+final now = DateTime.now();
+final todayStart = DateTime(now.year, now.month, now.day);
+
+for (var doc in snapshot.data!.docs) {
+  final data = doc.data() as Map<String, dynamic>;
+
+  final dynamic dateValue = data["date"];
+  DateTime? jobDate;
+
+  if (dateValue is Timestamp) {
+    jobDate = dateValue.toDate();
+  } else if (dateValue is String) {
+    try {
+      jobDate = DateTime.parse(dateValue);
+    } catch (_) {}
+  }
+
+  if (jobDate != null) {
+    final jobDay = DateTime(jobDate.year, jobDate.month, jobDate.day);
+
+    // Delete only AFTER the day passes
+    if (jobDay.isBefore(todayStart)) {
+      FirebaseFirestore.instance
+          .collection("jobs")
+          .doc(doc.id)
+          .delete();
+      continue;
+    }
+  }
+
+  jobs.add({
+    ...data,
+    "jobId": doc.id,
+  });
+}
 
                   List<Map<String, dynamic>> filteredJobs =
                       jobs.where((job) {

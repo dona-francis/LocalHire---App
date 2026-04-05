@@ -67,6 +67,12 @@ class _ApplyScreenState extends State<ApplyScreen> {
     setState(() => _isSubmitting = true);
 
     try {
+      final userDoc = await FirebaseFirestore.instance
+      .collection("users")
+      .doc(widget.workerId)
+      .get();
+
+  final workerName = userDoc.data()?["name"] ?? "Worker";
       // Check if already applied
       final existing = await FirebaseFirestore.instance
           .collection("applications")
@@ -91,8 +97,10 @@ class _ApplyScreenState extends State<ApplyScreen> {
         "jobId": widget.jobId,
         "workerId": widget.workerId,
         "employerId": widget.employerId,
+        "workerName": workerName,
+        "enquiry": _questionController.text.trim(),
         "status": "pending",
-        "question": _questionController.text.trim(),
+        "enquiry": _questionController.text.trim(),
         "proposedRate": _rateController.text.trim(),
         "preferredDate": selectedDate != null
             ? DateFormat('MM/dd/yyyy').format(selectedDate!)
