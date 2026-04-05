@@ -627,11 +627,11 @@ for (var doc in snapshot.data!.docs) {
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
     color: isHighlighted
-    ? const Color.fromARGB(255, 192, 131, 32)         
+    ? const Color.fromARGB(0, 39, 39, 34)         
     : const Color.fromARGB(255, 245, 228, 195),
       borderRadius: BorderRadius.circular(18),
        border: isHighlighted
-          ? Border.all(color: const Color.fromARGB(255, 156, 95, 3), width: 2.5)
+          ? Border.all(color: const Color.fromARGB(255, 255, 180, 30), width: 2.5)
           : null,
       boxShadow: [
         BoxShadow(
