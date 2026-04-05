@@ -25,8 +25,9 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    //  Honour initialTab passed from notification navigation
-    _tabIndex = widget.initialTab.clamp(0, 2);
+    // Honour initialTab passed from notification navigation
+    // Tab 0 = All, Tab 1 = Requests (Unread tab removed)
+    _tabIndex = widget.initialTab.clamp(0, 1);
   }
 
   String getOtherUserId(List<String> participants) {
@@ -78,10 +79,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
   String _formatTime(DateTime? time) {
     if (time == null) return '';
-    final diff = DateTime.now().difference(time);
+    final now = DateTime.now();
+    final diff = now.difference(time);
     if (diff.inMinutes < 1) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inHours < 24) {
+      // Show HH:MM for today, like WhatsApp
+      final h = time.hour.toString().padLeft(2, '0');
+      final m = time.minute.toString().padLeft(2, '0');
+      return '$h:$m';
+    }
     if (diff.inDays == 1) return 'Yesterday';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return '${time.day}/${time.month}/${time.year}';
@@ -140,7 +147,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
           const SizedBox(height: 12),
 
-          // ── 3-tab toggle: All / Unread / Requests ──
+          // ── 2-tab toggle: All / Requests ──
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: StreamBuilder<List<ChatModel>>(
@@ -160,17 +167,19 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   child: Row(
                     children: [
+                      // ── All tab ──
                       _tabButton("All", 0),
-                      _tabButton("Unread", 1),
+
+                      // ── Requests tab with badge ──
                       Expanded(
                         child: GestureDetector(
                           onTap: () =>
-                              setState(() => _tabIndex = 2),
+                              setState(() => _tabIndex = 1),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 vertical: 12),
                             decoration: BoxDecoration(
-                              color: _tabIndex == 2
+                              color: _tabIndex == 1
                                   ? Colors.white
                                   : Colors.transparent,
                               borderRadius:
@@ -248,9 +257,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 final accepted = allChats
                     .where((c) => !c.isRequestFor(currentUid))
                     .toList();
-                final unread = accepted
-                    .where((c) => c.unreadFor(currentUid) > 0)
-                    .toList();
 
                 List<ChatModel> displayList;
                 String emptyMessage;
@@ -258,9 +264,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (_tabIndex == 0) {
                   displayList = accepted;
                   emptyMessage = "No chats yet";
-                } else if (_tabIndex == 1) {
-                  displayList = unread;
-                  emptyMessage = "No unread messages";
                 } else {
                   displayList = requests;
                   emptyMessage = "No chat requests";
@@ -339,6 +342,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+// ─────────────────────────────────────────────
+// _ChatItem — individual chat row
+// ─────────────────────────────────────────────
 class _ChatItem extends StatefulWidget {
   final ChatModel chat;
   final String otherUserId;
@@ -498,6 +504,7 @@ class _ChatItemState extends State<_ChatItem>
 
     final initial =
         _name.isNotEmpty ? _name[0].toUpperCase() : '?';
+    final hasUnread = widget.unreadCount > 0 && !widget.isRequest;
 
     return GestureDetector(
       onLongPress:
@@ -519,7 +526,8 @@ class _ChatItemState extends State<_ChatItem>
       child: Container(
         margin: const EdgeInsets.symmetric(
             horizontal: 16, vertical: 6),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: widget.isRequest
               ? const Color(0xFFEDE8F5)
@@ -573,56 +581,40 @@ class _ChatItemState extends State<_ChatItem>
 
             const SizedBox(width: 12),
 
+            // ── Name + last message ──
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Name row
                   Row(
                     children: [
+                      if (widget.isPinned && !widget.isRequest) ...[
+                        const Icon(Icons.push_pin,
+                            size: 13, color: Colors.grey),
+                        const SizedBox(width: 3),
+                      ],
                       Expanded(
                         child: Text(
                           _name.isEmpty ? '' : _name,
                           style: TextStyle(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: hasUnread
+                                ? FontWeight.bold
+                                : FontWeight.w600,
                             fontSize: 16,
                             color: widget.isRequest
                                 ? Colors.deepPurple.shade400
-                                : widget.unreadCount > 0
-                                    ? Colors.black
-                                    : Colors.black87,
+                                : Colors.black87,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (widget.isPinned &&
-                          !widget.isRequest)
-                        const Icon(Icons.push_pin,
-                            size: 14, color: Colors.grey),
-                      // ✅ Unread bubble — shows count of unread messages
-                      if (widget.unreadCount > 0 &&
-                          !widget.isRequest)
-                        Container(
-                          margin:
-                              const EdgeInsets.only(left: 6),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 3),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFF4A825),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            widget.unreadCount > 99
-                                ? '99+'
-                                : '${widget.unreadCount}',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ),
                     ],
                   ),
+
                   const SizedBox(height: 4),
+
+                  // Last message / request label
                   widget.isRequest
                       ? Row(
                           children: [
@@ -644,11 +636,11 @@ class _ChatItemState extends State<_ChatItem>
                               ? "No messages yet"
                               : widget.chat.lastMessage,
                           style: TextStyle(
-                            color: widget.unreadCount > 0
-                                ? Colors.black54
+                            color: hasUnread
+                                ? Colors.black87
                                 : Colors.grey,
                             fontSize: 13,
-                            fontWeight: widget.unreadCount > 0
+                            fontWeight: hasUnread
                                 ? FontWeight.w500
                                 : FontWeight.normal,
                           ),
@@ -661,16 +653,56 @@ class _ChatItemState extends State<_ChatItem>
 
             const SizedBox(width: 8),
 
-            Text(
-              widget.formatTime(widget.chat.lastMessageTime),
-              style: TextStyle(
-                fontSize: 11,
-                color: widget.isRequest
-                    ? Colors.deepPurple.shade300
-                    : widget.unreadCount > 0
-                        ? const Color(0xFFF4A825)
-                        : Colors.grey,
-              ),
+            // ── Time + unread badge (right column, like WhatsApp) ──
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Timestamp — green/amber when unread
+                Text(
+                  widget.formatTime(widget.chat.lastMessageTime),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: widget.isRequest
+                        ? Colors.deepPurple.shade300
+                        : hasUnread
+                            ? const Color(0xFFF4A825)
+                            : Colors.grey,
+                    fontWeight: hasUnread
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+
+                const SizedBox(height: 5),
+
+                // Unread count bubble (WhatsApp style)
+                if (hasUnread)
+                  Container(
+                    constraints: const BoxConstraints(
+                        minWidth: 20, minHeight: 20),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF4A825),
+                      borderRadius:
+                          BorderRadius.all(Radius.circular(10)),
+                    ),
+                    child: Text(
+                      widget.unreadCount > 99
+                          ? '99+'
+                          : '${widget.unreadCount}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else
+                  // Reserve consistent height so rows don't shift
+                  const SizedBox(height: 20),
+              ],
             ),
           ],
         ),

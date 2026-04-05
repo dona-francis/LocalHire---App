@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import 'chat_screen.dart';
 import 'message_screen.dart';
-
 class NotificationScreen extends StatelessWidget {
   final String userId;
   const NotificationScreen({super.key, required this.userId});
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Capture the Scaffold/route context BEFORE StreamBuilder
+    //  Capture the Scaffold/route context BEFORE StreamBuilder
     // This is the context that owns the Navigator route for this screen
     final BuildContext routeContext = context;
 
@@ -34,8 +32,6 @@ class NotificationScreen extends StatelessWidget {
             .orderBy("createdAt", descending: true)
             .snapshots(),
         builder: (context, snapshot) {
-          // ⚠️ 'context' here is the StreamBuilder context — NOT the route context
-          // Always use routeContext for Navigator.pop
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -124,6 +120,10 @@ class _NotificationCard extends StatelessWidget {
         return Icons.flash_on;
       case "job_posted":
         return Icons.work_outline;
+      case "new_message":                      
+        return Icons.chat_bubble_outline; 
+       case "application_accepted":
+        return Icons.workspace_premium_rounded;
       default:
         return Icons.notifications;
     }
@@ -146,7 +146,6 @@ class _NotificationCard extends StatelessWidget {
         .doc(doc.id)
         .update({"isRead": true});
   } catch (e) {
-    // ✅ Silently ignore permission errors — don't let this block navigation
     debugPrint("⚠️ _markAsRead failed (ignored): $e");
   }
 }
@@ -185,9 +184,9 @@ class _NotificationCard extends StatelessWidget {
     if (jobId.isEmpty) return;
     await _markAsRead();
 
-    debugPrint("✅ Popping NotificationScreen with jobId=$jobId");
+    debugPrint("Popping NotificationScreen with jobId=$jobId");
 
-    // ✅ Use Navigator.of(screenContext) — this correctly targets the
+    //  Use Navigator.of(screenContext) — this correctly targets the
     // NotificationScreen route, not a nested StreamBuilder/ListView context
     Navigator.of(screenContext).pop({'scrollToJobId': jobId});
   }
@@ -251,7 +250,10 @@ class _NotificationCard extends StatelessWidget {
     final String chatId = extraData["chatId"] ?? "";
     final String otherUserId = extraData["otherUserId"] ?? "";
     final String otherUserName =
-        extraData["acceptedByName"] ?? extraData["senderName"] ?? "";
+         extraData["acceptedByName"] ??
+        extraData["senderName"] ??
+        extraData["employerName"] ??  
+        "";
 
     debugPrint("🔔 Notification type=$type | jobId=$jobId | extraData=$extraData");
 
@@ -259,6 +261,8 @@ class _NotificationCard extends StatelessWidget {
         type == "instant_job" || type == "job_posted";
     final bool isMessageRequest = type == "message_request";
     final bool isRequestAccepted = type == "request_accepted";
+    final bool isNewMessage = type == "new_message";  
+    final bool isApplicationAccepted = type == "application_accepted";
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
@@ -313,7 +317,7 @@ class _NotificationCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (isMessageRequest || isJobNotification)
+                if (isMessageRequest || isJobNotification ||isNewMessage)
                   GestureDetector(
                     onTap: () => _confirmDelete(context),
                     child: Text(
@@ -329,21 +333,21 @@ class _NotificationCard extends StatelessWidget {
                   onTap: () async {
                     if (isMessageRequest) {
                       await _navigateToChatRequests(context);
-                    } else if (isRequestAccepted) {
+                    } else if (isRequestAccepted || isNewMessage) { // ← CHANGE: add isNewMessage
                       await _navigateToMessage(
                         context,
                         chatId: chatId,
                         otherUserId: otherUserId,
                         otherUserName: otherUserName,
                       );
-                    } else if (isJobNotification) {
-                      await _navigateToJob(jobId); // ✅ uses screenContext internally
+                    } else if (isJobNotification || isApplicationAccepted) {
+                      await _navigateToJob(jobId); 
                     }
                   },
                   child: Text(
                     isMessageRequest
                         ? "View"
-                        : isRequestAccepted
+                        :( isRequestAccepted || isNewMessage)
                             ? "Open Chat"
                             : "View Details",
                     style: TextStyle(
