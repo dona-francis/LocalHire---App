@@ -200,16 +200,12 @@ class _AppliedJobsTab extends StatefulWidget {
 
 class _AppliedJobsTabState extends State<_AppliedJobsTab>
     with AutomaticKeepAliveClientMixin {
-
-  List<QueryDocumentSnapshot> _lastKnownApplications = [];
-
   @override
   bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection("applications")
@@ -217,40 +213,28 @@ class _AppliedJobsTabState extends State<_AppliedJobsTab>
           .orderBy("createdAt", descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          _lastKnownApplications = snapshot.data!.docs;
-        }
-
-        final applications = _lastKnownApplications;
-
-        // ✅ Show loader ONLY if nothing cached yet
-        if (applications.isEmpty &&
-            snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(
-              color: Color(0xFFFFB544),
-            ),
-          );
+              child: CircularProgressIndicator(color: Color(0xFFFFB544)));
         }
-        if (applications.isEmpty &&
-            snapshot.connectionState == ConnectionState.active) {
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return _emptyState(
             icon: Icons.assignment_outlined,
             message: "You haven't applied to any jobs yet.",
           );
         }
 
+        final applications = snapshot.data!.docs;
+
         return ListView.builder(
-          key: const PageStorageKey('applied_jobs_list'), 
           padding: const EdgeInsets.symmetric(horizontal: 16),
           itemCount: applications.length,
           itemBuilder: (context, index) {
             final appData =
                 applications[index].data() as Map<String, dynamic>;
             final appId = applications[index].id;
-
             return _AppliedJobCard(
-              key: ValueKey(appId), 
               appId: appId,
               appData: appData,
               userId: widget.userId,
